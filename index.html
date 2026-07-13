@@ -46,6 +46,29 @@
   header .sub{margin-top:8px;color:var(--muted);font-size:13px;font-weight:500}
   header .sub b{color:var(--green);font-weight:700}
 
+  /* 共用帳單 */
+  .conn{padding:14px 18px}
+  .conn-row{display:flex;gap:8px;align-items:center}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none;transition:.2s}
+  .dot.on{background:#2fb36b;box-shadow:0 0 0 3px rgba(47,179,107,.2)}
+  .conn-row input{
+    flex:1;min-width:0;font-family:inherit;font-size:15px;color:var(--ink);
+    border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fff;
+  }
+  .conn-row input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,73,58,.12)}
+  .conn-row input[readonly]{background:var(--green-soft);font-weight:700;letter-spacing:.06em;cursor:default}
+  .conn-row button{
+    font-family:inherit;font-size:14px;font-weight:700;border-radius:9px;padding:10px 14px;
+    cursor:pointer;border:1px solid var(--green);background:var(--green);color:#fff;flex:none;transition:.15s;
+  }
+  .conn-row button:hover{background:#0f3a2d}
+  .conn-row button.ghost{background:#fff;color:var(--green)}
+  .conn-row button.ghost:hover{background:var(--green-soft)}
+  .conn-row button:disabled{opacity:.45;cursor:not-allowed}
+  .conn-hint{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.55}
+  .conn-hint.warn{color:var(--amber-deep)}
+  .conn-hint b{color:var(--green)}
+
   /* 卡片 */
   .card{
     background:var(--paper);border:1px solid var(--line);border-radius:14px;
@@ -77,12 +100,12 @@
   /* 分組切換 */
   .toolbar{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:12px 18px;border-bottom:1px dashed var(--line);
+    padding:12px 18px;border-bottom:1px dashed var(--line);flex-wrap:wrap;
   }
-  .seg{display:inline-flex;background:var(--green-soft);border-radius:9px;padding:3px}
+  .seg{display:inline-flex;flex-wrap:wrap;background:var(--green-soft);border-radius:9px;padding:3px}
   .seg button{
     font-family:inherit;font-size:13px;font-weight:700;color:var(--green);
-    background:transparent;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;
+    background:transparent;border:none;border-radius:7px;padding:7px 11px;cursor:pointer;
   }
   .seg button.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
   .count{font-size:13px;color:var(--muted);font-weight:500}
@@ -120,6 +143,30 @@
     display:flex;align-items:center;justify-content:center;transition:.15s;
   }
   .item .del:hover{background:#f6dfd9;color:var(--danger)}
+  .item .ops{display:flex;gap:2px}
+  .item .edit{
+    width:28px;height:28px;border:none;background:transparent;color:var(--muted);
+    border-radius:7px;cursor:pointer;font-size:14px;line-height:1;
+    display:flex;align-items:center;justify-content:center;transition:.15s;
+  }
+  .item .edit:hover{background:var(--green-soft);color:var(--green)}
+
+  /* 編輯彈窗 */
+  .modal-mask{position:fixed;inset:0;background:rgba(35,32,25,.5);display:flex;
+    align-items:center;justify-content:center;padding:20px;z-index:60}
+  .modal-mask[hidden]{display:none}
+  .modal{background:var(--paper);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 20px 60px rgba(35,32,25,.3);width:100%;max-width:400px;padding:22px}
+  .modal h3{font-size:18px;font-weight:900;margin-bottom:16px;color:var(--green)}
+  .modal .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .modal .field.full{margin-top:10px}
+  .modal .m-actions{display:flex;gap:10px;margin-top:18px}
+  .modal .m-actions button{flex:1;font-family:inherit;font-size:15px;font-weight:700;
+    cursor:pointer;border-radius:10px;padding:12px;transition:.15s}
+  .modal .m-cancel{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .modal .m-cancel:hover{border-color:var(--muted)}
+  .modal .m-save{background:var(--green);border:none;color:#fff}
+  .modal .m-save:hover{background:#0f3a2d}
 
   /* 總計 */
   .total{background:var(--green);color:#fbf9f3;padding:20px 22px}
@@ -184,6 +231,17 @@
     <div class="sub" id="metaLine">尚無紀錄</div>
   </header>
 
+  <!-- 共用帳單 -->
+  <div class="card conn">
+    <div class="conn-row">
+      <span class="dot" id="connDot"></span>
+      <input id="billInput" placeholder="輸入帳單代碼一起點餐" autocomplete="off">
+      <button id="connBtn">加入</button>
+      <button id="shareBtn" class="ghost" style="display:none">分享</button>
+    </div>
+    <div class="conn-hint" id="connHint">單機模式:資料只存在這台裝置</div>
+  </div>
+
   <!-- 輸入 -->
   <div class="card">
     <div class="entry">
@@ -215,6 +273,7 @@
       <div class="seg" id="seg">
         <button data-mode="table" class="on">依桌號</button>
         <button data-mode="name">依姓名</button>
+        <button data-mode="item">依餐點</button>
         <button data-mode="none">全部</button>
       </div>
       <span class="count" id="countLbl">0 筆</span>
@@ -244,15 +303,57 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-mask" id="editMask" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3>編輯這一筆</h3>
+    <div class="row">
+      <div class="field">
+        <label for="eTable">桌號</label>
+        <input id="eTable" class="mono" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="eName">姓名</label>
+        <input id="eName" autocomplete="off">
+      </div>
+    </div>
+    <div class="field full">
+      <label for="eItem">餐點內容</label>
+      <input id="eItem" autocomplete="off">
+    </div>
+    <div class="field full">
+      <label for="eAmt">金額</label>
+      <input id="eAmt" class="mono" type="number" inputmode="decimal" min="0" step="1" autocomplete="off">
+    </div>
+    <div class="m-actions">
+      <button class="m-cancel" id="eCancel">取消</button>
+      <button class="m-save" id="eSave">儲存修改</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   "use strict";
+
+  /* ▼▼▼ 貼上你的 Google Apps Script 網頁應用程式網址(部署後結尾為 /exec) ▼▼▼ */
+  var API_URL = "https://script.google.com/macros/s/AKfycbyuls6VD-LfWgp892qFroqstUcCJK61JzYM6mtwoCYz0NUCdtHUasWVGcYRH4WmsE-D/exec";
+  /* ▲▲▲ 留空則維持單機模式;填好後即可多人共用同一份帳單 ▲▲▲ */
+
   var KEY = "feast-orders-v1";
   var records = load();
   var mode = "table";
   var svc = localStorage.getItem("feast-svc") === "1";
   var SVC_RATE = 0.10;
   var clearArmed = false;
+  var editingId = null;
+
+  var online = false, billCode = "";
+  var pollTimer = null;
+  var POLL_MS = 3000;
+
+  function backendReady(){
+    return !!(API_URL && API_URL.indexOf("http") === 0);
+  }
   var clearTimer = null;
 
   var $ = function(id){ return document.getElementById(id); };
@@ -285,24 +386,67 @@
     var amt   = parseFloat(fAmt.value);
     if(!item){ toast("請填寫餐點內容"); fItem.focus(); return; }
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); fAmt.focus(); return; }
-    records.push({
-      id: Date.now() + "-" + Math.random().toString(36).slice(2,6),
-      table: table || "未分桌",
-      name: name || "—",
-      item: item,
-      amt: amt
-    });
-    save();
-    // 保留桌號與姓名，方便連續輸入同一人
+    var rec = { table: table || "未分桌", name: name || "—", item: item, amt: amt };
+    if(online){
+      apiPost({ action:"add", bill:billCode, table:rec.table, name:rec.name, item:rec.item, amt:rec.amt })
+        .then(function(){ toast("已新增"); poll(); })
+        .catch(function(){ toast("新增失敗,請確認連線"); });
+    }else{
+      rec.id = Date.now() + "-" + Math.random().toString(36).slice(2,6);
+      records.push(rec);
+      save(); render();
+      toast("已新增");
+    }
+    // 保留桌號與姓名,方便連續輸入同一人
     fItem.value=""; fAmt.value="";
     fItem.focus();
-    render();
-    toast("已新增");
   }
 
   function del(id){
+    if(online){
+      apiPost({ action:"delete", bill:billCode, id:id }).then(poll).catch(function(){ toast("刪除失敗"); });
+      return;
+    }
     records = records.filter(function(r){ return r.id !== id; });
     save(); render();
+  }
+
+  function findRec(id){
+    for(var i=0;i<records.length;i++){ if(records[i].id===id) return records[i]; }
+    return null;
+  }
+  function openEdit(id){
+    var r = findRec(id); if(!r) return;
+    editingId = id;
+    $("eTable").value = r.table === "未分桌" ? "" : r.table;
+    $("eName").value  = r.name === "—" ? "" : r.name;
+    $("eItem").value  = r.item;
+    $("eAmt").value   = r.amt;
+    $("editMask").hidden = false;
+    $("eItem").focus();
+  }
+  function closeEdit(){ editingId = null; $("editMask").hidden = true; }
+  function saveEdit(){
+    var item = $("eItem").value.trim();
+    var amt  = parseFloat($("eAmt").value);
+    if(!item){ toast("請填寫餐點內容"); $("eItem").focus(); return; }
+    if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); $("eAmt").focus(); return; }
+    var data = {
+      table: $("eTable").value.trim() || "未分桌",
+      name:  $("eName").value.trim() || "—",
+      item:  item,
+      amt:   amt
+    };
+    if(online){
+      apiPost({ action:"update", bill:billCode, id:editingId, table:data.table, name:data.name, item:data.item, amt:data.amt })
+        .then(function(){ toast("已更新"); poll(); })
+        .catch(function(){ toast("更新失敗"); });
+      closeEdit();
+      return;
+    }
+    var r = findRec(editingId); if(!r){ closeEdit(); return; }
+    r.table = data.table; r.name = data.name; r.item = data.item; r.amt = data.amt;
+    save(); closeEdit(); render(); toast("已更新");
   }
 
   function groupBy(keyFn){
@@ -354,14 +498,14 @@
     if(mode === "none"){
       html += records.map(rowHtml).join("");
     }else{
-      var groups = mode === "table"
-        ? groupBy(function(r){ return r.table; })
-        : groupBy(function(r){ return r.name; });
+      var groups = mode === "table" ? groupBy(function(r){ return r.table; })
+                 : mode === "name"  ? groupBy(function(r){ return r.name; })
+                 : groupBy(function(r){ return r.item; });
       groups.forEach(function(g){
         var sub = g.items.reduce(function(s,r){ return s + r.amt; },0);
         var label = mode==="table" ? "桌號 "+esc(g.key) : esc(g.key);
-        var tag = mode==="table"
-          ? '<span class="tag">'+g.items.length+' 筆</span>'
+        var tag = (mode==="table" || mode==="item")
+          ? '<span class="tag">'+g.items.length+(mode==="item"?" 份":" 筆")+'</span>'
           : '';
         html += '<div class="group-head">'+
                   '<span class="g-name">'+label+tag+'</span>'+
@@ -375,15 +519,25 @@
     Array.prototype.forEach.call(list.querySelectorAll(".del"), function(btn){
       btn.addEventListener("click", function(){ del(btn.getAttribute("data-id")); });
     });
+    Array.prototype.forEach.call(list.querySelectorAll(".edit"), function(btn){
+      btn.addEventListener("click", function(){ openEdit(btn.getAttribute("data-edit")); });
+    });
   }
 
   function rowHtml(r){
-    var who = mode==="name" ? esc(r.table==="未分桌"?"未分桌":"桌 "+r.table)
-                            : esc(r.name);
+    var tbl = r.table === "未分桌" ? "未分桌" : "桌 " + r.table;
+    var who = r.name === "—" ? "（未填姓名）" : r.name;
+    var secondary, primary;
+    if(mode === "item"){ secondary = tbl; primary = who; }
+    else if(mode === "name"){ secondary = tbl; primary = r.item; }
+    else { secondary = who; primary = r.item; }
     return '<div class="item">'+
-      '<div><div class="who">'+who+'</div><div class="what">'+esc(r.item)+'</div></div>'+
+      '<div><div class="who">'+esc(secondary)+'</div><div class="what">'+esc(primary)+'</div></div>'+
       '<div class="amt mono">$'+money(r.amt)+'</div>'+
-      '<button class="del" data-id="'+r.id+'" title="刪除">✕</button>'+
+      '<div class="ops">'+
+        '<button class="edit" data-edit="'+r.id+'" title="編輯">✎</button>'+
+        '<button class="del" data-id="'+r.id+'" title="刪除">✕</button>'+
+      '</div>'+
     '</div>';
   }
 
@@ -426,6 +580,13 @@
       clearTimer = setTimeout(resetClear, 3000);
       return;
     }
+    if(online){
+      apiPost({ action:"clear", bill:billCode })
+        .then(function(){ toast("已清空全部紀錄"); poll(); })
+        .catch(function(){ toast("清空失敗"); });
+      resetClear();
+      return;
+    }
     records = [];
     save(); render();
     resetClear();
@@ -437,6 +598,96 @@
     var btn = $("clearBtn");
     btn.classList.remove("confirm");
     btn.textContent = "清空全部";
+  }
+
+  function updateConnUI(){
+    var dot=$("connDot"), input=$("billInput"), btn=$("connBtn"), share=$("shareBtn"), hint=$("connHint");
+    if(!backendReady()){
+      dot.classList.remove("on");
+      input.disabled = true; btn.disabled = true;
+      input.placeholder = "尚未設定後端網址";
+      hint.classList.add("warn");
+      hint.innerHTML = "多人共用需先在原始碼的 <b>API_URL</b> 填入你的 Google Apps Script 網址。目前為單機模式。";
+      share.style.display = "none";
+      return;
+    }
+    if(online){
+      dot.classList.add("on");
+      input.value = billCode; input.readOnly = true;
+      btn.textContent = "離線"; btn.classList.add("ghost");
+      share.style.display = "";
+      hint.classList.remove("warn");
+      hint.innerHTML = "已連線 · 帳單代碼 <b>"+esc(billCode)+"</b>。把代碼或「分享」連結給朋友,即可一起點餐。";
+    }else{
+      dot.classList.remove("on");
+      input.readOnly = false; input.disabled = false; btn.disabled = false;
+      btn.textContent = "加入"; btn.classList.remove("ghost");
+      share.style.display = "none";
+      hint.classList.remove("warn");
+      hint.innerHTML = "輸入一個帳單代碼(例如「聚餐0713」)並按加入,同代碼的人即可共用同一份帳單。";
+    }
+  }
+
+  function apiPost(payload){
+    return fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); });
+  }
+
+  function poll(){
+    if(!online) return;
+    fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(!online || (data.bill && data.bill !== billCode)) return;
+        records = (data.orders || []).map(function(x){
+          return { id:String(x.id), table:x.table, name:x.name, item:x.item, amt:Number(x.amt) };
+        });
+        svc = !!data.svc;
+        render();
+      })
+      .catch(function(){ /* 靜默,下一輪重試 */ });
+  }
+
+  function teardown(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function connect(code){
+    code = (code || "").trim();
+    if(!code){ toast("請輸入帳單代碼"); return; }
+    if(!backendReady()){ toast("尚未設定後端網址"); return; }
+    teardown();
+    billCode = code;
+    online = true;
+    localStorage.setItem("feast-bill", code);
+    updateConnUI();
+    poll();
+    pollTimer = setInterval(poll, POLL_MS);
+    toast("已加入 " + code);
+  }
+
+  function disconnect(){
+    teardown();
+    online = false; billCode = "";
+    localStorage.removeItem("feast-bill");
+    records = load();
+    svc = localStorage.getItem("feast-svc") === "1";
+    updateConnUI(); render();
+    toast("已離線,回到單機模式");
+  }
+
+  function share(){
+    var url = location.origin + location.pathname + "?bill=" + encodeURIComponent(billCode);
+    if(navigator.share){
+      navigator.share({ title:"聚餐點餐", text:"一起來點餐,帳單代碼:"+billCode, url:url }).catch(function(){});
+    }else if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){ toast("已複製分享連結"); }).catch(function(){ toast(url); });
+    }else{
+      toast(url);
+    }
   }
 
   // 事件
@@ -455,11 +706,40 @@
   $("clearBtn").addEventListener("click", clearAll);
   $("svcChk").addEventListener("change", function(){
     svc = this.checked;
-    localStorage.setItem("feast-svc", svc ? "1" : "0");
+    if(online){
+      apiPost({ action:"svc", bill:billCode, svc: svc }).catch(function(){ toast("同步失敗"); });
+    }else{
+      localStorage.setItem("feast-svc", svc ? "1" : "0");
+    }
     render();
   });
+  $("eSave").addEventListener("click", saveEdit);
+  $("eCancel").addEventListener("click", closeEdit);
+  $("connBtn").addEventListener("click", function(){
+    if(online){ disconnect(); } else { connect($("billInput").value); }
+  });
+  $("billInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter" && !online){ connect(this.value); }
+  });
+  $("shareBtn").addEventListener("click", share);
+  $("editMask").addEventListener("click", function(e){
+    if(e.target === this) closeEdit();
+  });
+  ["eTable","eName","eItem","eAmt"].forEach(function(id){
+    $(id).addEventListener("keydown", function(e){
+      if(e.key === "Enter") saveEdit();
+      if(e.key === "Escape") closeEdit();
+    });
+  });
 
-  render();
+  updateConnUI();
+  var params = new URLSearchParams(location.search);
+  var auto = params.get("bill") || localStorage.getItem("feast-bill");
+  if(auto && backendReady()){
+    connect(auto);
+  }else{
+    render();
+  }
 })();
 </script>
 </body>
