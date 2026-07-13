@@ -51,6 +51,8 @@
   .conn-row{display:flex;gap:8px;align-items:center}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none;transition:.2s}
   .dot.on{background:#2fb36b;box-shadow:0 0 0 3px rgba(47,179,107,.2)}
+  .conn-status{font-size:14px;font-weight:700;color:var(--green)}
+  .conn-status.off{color:var(--muted)}
   .conn-row input{
     flex:1;min-width:0;font-family:inherit;font-size:15px;color:var(--ink);
     border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fff;
@@ -231,15 +233,13 @@
     <div class="sub" id="metaLine">尚無紀錄</div>
   </header>
 
-  <!-- 共用帳單 -->
+  <!-- 雲端同步狀態 -->
   <div class="card conn">
     <div class="conn-row">
       <span class="dot" id="connDot"></span>
-      <input id="billInput" placeholder="輸入帳單代碼一起點餐" autocomplete="off">
-      <button id="connBtn">加入</button>
-      <button id="shareBtn" class="ghost" style="display:none">分享</button>
+      <span class="conn-status off" id="connStatus">連線中…</span>
     </div>
-    <div class="conn-hint" id="connHint">單機模式:資料只存在這台裝置</div>
+    <div class="conn-hint" id="connHint">所有人開啟這個網頁即共用同一份帳單</div>
   </div>
 
   <!-- 輸入 -->
@@ -348,6 +348,7 @@
   var editingId = null;
 
   var online = false, billCode = "";
+  var FIXED_BILL = "feast-shared";
   var pollTimer = null;
   var POLL_MS = 3000;
 
@@ -601,30 +602,25 @@
   }
 
   function updateConnUI(){
-    var dot=$("connDot"), input=$("billInput"), btn=$("connBtn"), share=$("shareBtn"), hint=$("connHint");
+    var dot=$("connDot"), status=$("connStatus"), hint=$("connHint");
     if(!backendReady()){
       dot.classList.remove("on");
-      input.disabled = true; btn.disabled = true;
-      input.placeholder = "尚未設定後端網址";
+      status.textContent = "單機模式";
+      status.classList.add("off");
       hint.classList.add("warn");
-      hint.innerHTML = "多人共用需先在原始碼的 <b>API_URL</b> 填入你的 Google Apps Script 網址。目前為單機模式。";
-      share.style.display = "none";
+      hint.innerHTML = "尚未設定雲端(<b>API_URL</b>),資料只存在這台裝置。";
       return;
     }
+    hint.classList.remove("warn");
+    hint.innerHTML = "所有人開啟這個網頁即共用同一份帳單,約每 3 秒自動同步。";
     if(online){
       dot.classList.add("on");
-      input.value = billCode; input.readOnly = true;
-      btn.textContent = "離線"; btn.classList.add("ghost");
-      share.style.display = "";
-      hint.classList.remove("warn");
-      hint.innerHTML = "已連線 · 帳單代碼 <b>"+esc(billCode)+"</b>。把代碼或「分享」連結給朋友,即可一起點餐。";
+      status.textContent = "已同步到雲端";
+      status.classList.remove("off");
     }else{
       dot.classList.remove("on");
-      input.readOnly = false; input.disabled = false; btn.disabled = false;
-      btn.textContent = "加入"; btn.classList.remove("ghost");
-      share.style.display = "none";
-      hint.classList.remove("warn");
-      hint.innerHTML = "輸入一個帳單代碼(例如「聚餐0713」)並按加入,同代碼的人即可共用同一份帳單。";
+      status.textContent = "連線中…";
+      status.classList.add("off");
     }
   }
 
@@ -655,39 +651,14 @@
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
   }
 
-  function connect(code){
-    code = (code || "").trim();
-    if(!code){ toast("請輸入帳單代碼"); return; }
-    if(!backendReady()){ toast("尚未設定後端網址"); return; }
+  function connect(){
+    if(!backendReady()){ updateConnUI(); render(); return; }
     teardown();
-    billCode = code;
+    billCode = FIXED_BILL;
     online = true;
-    localStorage.setItem("feast-bill", code);
     updateConnUI();
     poll();
     pollTimer = setInterval(poll, POLL_MS);
-    toast("已加入 " + code);
-  }
-
-  function disconnect(){
-    teardown();
-    online = false; billCode = "";
-    localStorage.removeItem("feast-bill");
-    records = load();
-    svc = localStorage.getItem("feast-svc") === "1";
-    updateConnUI(); render();
-    toast("已離線,回到單機模式");
-  }
-
-  function share(){
-    var url = location.origin + location.pathname + "?bill=" + encodeURIComponent(billCode);
-    if(navigator.share){
-      navigator.share({ title:"聚餐點餐", text:"一起來點餐,帳單代碼:"+billCode, url:url }).catch(function(){});
-    }else if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(url).then(function(){ toast("已複製分享連結"); }).catch(function(){ toast(url); });
-    }else{
-      toast(url);
-    }
   }
 
   // 事件
@@ -715,13 +686,6 @@
   });
   $("eSave").addEventListener("click", saveEdit);
   $("eCancel").addEventListener("click", closeEdit);
-  $("connBtn").addEventListener("click", function(){
-    if(online){ disconnect(); } else { connect($("billInput").value); }
-  });
-  $("billInput").addEventListener("keydown", function(e){
-    if(e.key === "Enter" && !online){ connect(this.value); }
-  });
-  $("shareBtn").addEventListener("click", share);
   $("editMask").addEventListener("click", function(e){
     if(e.target === this) closeEdit();
   });
@@ -733,10 +697,8 @@
   });
 
   updateConnUI();
-  var params = new URLSearchParams(location.search);
-  var auto = params.get("bill") || localStorage.getItem("feast-bill");
-  if(auto && backendReady()){
-    connect(auto);
+  if(backendReady()){
+    connect();
   }else{
     render();
   }
