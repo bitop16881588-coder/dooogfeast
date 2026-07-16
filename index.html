@@ -303,6 +303,8 @@
     padding:11px 18px;
   }
   .item:hover{background:rgba(78,115,152,.06)}
+  .item.pending{opacity:.5}
+  .item.pending .amt::after{content:"⟳";margin-left:5px;font-size:11px;opacity:.7}
   .item .who{font-size:13px;color:var(--muted);font-weight:500}
   .item .what{font-size:15px;font-weight:500;margin-top:1px}
   .item .amt{font-size:15px;font-weight:700}
@@ -712,9 +714,19 @@
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); fAmt.focus(); return; }
     var rec = { table: table, name: name, item: item, amt: amt };
     if(online){
+      // 先本地顯示,不等雲端來回;伺服器回應後會用正式資料取代這筆
+      var tmpId = "tmp-" + Date.now() + "-" + Math.random().toString(36).slice(2,6);
+      rec.id = tmpId;
+      rec.pending = true;
+      records.push(rec);
+      render();
       mutate({ action:"add", bill:billCode, table:rec.table, name:rec.name, item:rec.item, amt:rec.amt })
         .then(function(){ toast("已新增"); })
-        .catch(function(){ toast("新增失敗,請確認連線"); });
+        .catch(function(){
+          records = records.filter(function(r){ return r.id !== tmpId; });   // 送出失敗就收回
+          render();
+          toast("新增失敗,請確認連線");
+        });
     }else{
       rec.id = Date.now() + "-" + Math.random().toString(36).slice(2,6);
       records.push(rec);
@@ -729,7 +741,11 @@
   function del(id){
     if(lockOrder){ toast("點餐已鎖定,需解鎖才能修改"); return; }
     if(online){
-      mutate({ action:"delete", bill:billCode, id:id }).catch(function(){ toast("刪除失敗"); });
+      var backup = records.slice();
+      records = records.filter(function(r){ return r.id !== id; });
+      render();
+      mutate({ action:"delete", bill:billCode, id:id })
+        .catch(function(){ records = backup; render(); toast("刪除失敗"); });
       return;
     }
     records = records.filter(function(r){ return r.id !== id; });
@@ -763,10 +779,15 @@
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); $("eAmt").focus(); return; }
     var data = { table: table, name: name, item: item, amt: amt };
     if(online){
-      mutate({ action:"update", bill:billCode, id:editingId, table:data.table, name:data.name, item:data.item, amt:data.amt })
-        .then(function(){ toast("已更新"); })
-        .catch(function(){ toast("更新失敗"); });
+      var id = editingId;
+      var before = records.map(function(r){ return { id:r.id, table:r.table, name:r.name, item:r.item, amt:r.amt }; });
+      var cur = findRec(id);
+      if(cur){ cur.table = data.table; cur.name = data.name; cur.item = data.item; cur.amt = data.amt; }
       closeEdit();
+      render();
+      mutate({ action:"update", bill:billCode, id:id, table:data.table, name:data.name, item:data.item, amt:data.amt })
+        .then(function(){ toast("已更新"); })
+        .catch(function(){ records = before; render(); toast("更新失敗"); });
       return;
     }
     var r = findRec(editingId); if(!r){ closeEdit(); return; }
@@ -1273,10 +1294,10 @@
     var secondary, primary;
     if(mode === "name"){ secondary = tbl; primary = r.item; }
     else { secondary = who; primary = r.item; }
-    return '<div class="item">'+
+    return '<div class="item'+(r.pending ? ' pending' : '')+'">'+
       '<div><div class="who">'+esc(secondary)+'</div><div class="what">'+esc(primary)+'</div></div>'+
       '<div class="amt mono">$'+money(r.amt)+'</div>'+
-      (lockOrder ? '' :
+      (lockOrder || r.pending ? '' :
         '<div class="ops">'+
           '<button class="edit" data-edit="'+r.id+'" title="編輯">✎</button>'+
           '<button class="del" data-id="'+r.id+'" title="刪除">✕</button>'+
@@ -1365,12 +1386,22 @@
   }
 
   /* 本地寫入:標記時間戳,期間拒絕套用任何較舊的輪詢結果,避免新增被蓋掉 */
+  /* 每次寫入給一個遞增序號。伺服器可能亂序回應(先發的後到),
+     只有「最後發出」的那次回應才代表最完整的狀態,較早的一律丟棄,
+     否則連續新增時會被舊回應蓋掉。 */
+  var writeSeq = 0, lastAppliedSeq = 0;
   function mutate(payload){
     lastMutation = Date.now();
     pendingWrites++;
+    var mySeq = ++writeSeq;
     return apiPost(payload).then(function(data){
       pendingWrites--;
       lastMutation = Date.now();
+      if(mySeq < lastAppliedSeq){                        // 過期回應 → 不套用
+        if(pendingWrites === 0){ lastRev = ""; poll(); } // 已無寫入中 → 立刻補抓最新狀態
+        return data;
+      }
+      lastAppliedSeq = mySeq;
       if(data && data.rev){ lastRev = String(data.rev); lastFullAt = Date.now(); }
       applyData(data);
       return data;
