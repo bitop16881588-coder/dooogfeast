@@ -105,6 +105,19 @@
   }
   .field input.mono{font-family:"JetBrains Mono",monospace}
   .field input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,73,58,.12)}
+  .field select{
+    font-family:inherit;font-size:16px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:9px;
+    padding:11px 30px 11px 12px;width:100%;cursor:pointer;
+    appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238b8271' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center;background-size:11px;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .field select.mono{font-family:"JetBrains Mono",monospace;font-weight:700}
+  .field select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,73,58,.12)}
+  .field select:disabled{background-color:#f0ede5;color:var(--muted);cursor:not-allowed}
+  .field select.empty{color:var(--muted);font-weight:500}
   .field.full{margin-top:10px}
   .svc-toggle{
     display:flex;align-items:center;gap:10px;margin-top:14px;cursor:pointer;
@@ -409,11 +422,11 @@
       <div class="row">
         <div class="field">
           <label for="fTable">桌號 <em>*</em></label>
-          <input id="fTable" class="mono" placeholder="1" autocomplete="off">
+          <select id="fTable" class="mono"></select>
         </div>
         <div class="field">
           <label for="fName">姓名 <em>*</em></label>
-          <input id="fName" placeholder="小明" autocomplete="off">
+          <select id="fName"></select>
         </div>
       </div>
       <div class="field full">
@@ -549,11 +562,11 @@
     <div class="row">
       <div class="field">
         <label for="eTable">桌號 <em>*</em></label>
-        <input id="eTable" class="mono" autocomplete="off">
+        <select id="eTable" class="mono"></select>
       </div>
       <div class="field">
         <label for="eName">姓名 <em>*</em></label>
-        <input id="eName" autocomplete="off">
+        <select id="eName"></select>
       </div>
     </div>
     <div class="field full">
@@ -679,8 +692,14 @@
     var name  = fName.value.trim();
     var item  = fItem.value.trim();
     var amt   = parseFloat(fAmt.value);
-    if(!table){ toast("請填寫桌號"); fTable.focus(); return; }
-    if(!name){ toast("請填寫姓名"); fName.focus(); return; }
+    if(!table){
+      toast(seats.length ? "請選擇桌號" : "請先到座位圖新增桌號");
+      fTable.focus(); return;
+    }
+    if(!name){
+      toast(namesOfTable(table).length ? "請選擇姓名" : "此桌座位圖尚未填姓名");
+      fName.focus(); return;
+    }
     if(!item){ toast("請填寫餐點內容"); fItem.focus(); return; }
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); fAmt.focus(); return; }
     var rec = { table: table, name: name, item: item, amt: amt };
@@ -717,8 +736,8 @@
     if(lockOrder){ toast("點餐已鎖定,需解鎖才能修改"); return; }
     var r = findRec(id); if(!r) return;
     editingId = id;
-    $("eTable").value = r.table === "未分桌" ? "" : r.table;
-    $("eName").value  = r.name === "—" ? "" : r.name;
+    fillTableOptions($("eTable"), r.table === "未分桌" ? "" : r.table);
+    fillNameOptions($("eName"), $("eTable").value, r.name === "—" ? "" : r.name);
     $("eItem").value  = r.item;
     $("eAmt").value   = r.amt;
     $("editMask").hidden = false;
@@ -730,8 +749,8 @@
     var name  = $("eName").value.trim();
     var item  = $("eItem").value.trim();
     var amt   = parseFloat($("eAmt").value);
-    if(!table){ toast("請填寫桌號"); $("eTable").focus(); return; }
-    if(!name){ toast("請填寫姓名"); $("eName").focus(); return; }
+    if(!table){ toast("請選擇桌號"); $("eTable").focus(); return; }
+    if(!name){ toast("請選擇姓名"); $("eName").focus(); return; }
     if(!item){ toast("請填寫餐點內容"); $("eItem").focus(); return; }
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); $("eAmt").focus(); return; }
     var data = { table: table, name: name, item: item, amt: amt };
@@ -758,6 +777,7 @@
   }
 
   function render(){
+    syncTableOptions();
     var list = $("list");
     var count = records.length;
     var grand = records.reduce(function(s,r){ return s + r.amt; },0);
@@ -831,6 +851,7 @@
   }
 
   function renderSeats(){
+    syncTableOptions();
     var area = $("seatArea");
     $("seatCountLbl").textContent = seats.length + " 桌";
     if(!seats.length){
@@ -1164,6 +1185,50 @@
     box.innerHTML = html;
   }
 
+  /* 桌號選項直接取自座位圖;重填時保住使用者當前選擇,避免同步時被重設 */
+  function fillTableOptions(sel, extra){
+    var keep = sel.value;
+    var list = seats.map(function(t){ return t.table; });
+    if(extra && list.indexOf(extra) === -1) list.unshift(extra);   // 舊資料的桌號不因不在座位圖而消失
+    var html = list.length
+      ? '<option value="">選擇桌號</option>'
+      : '<option value="">座位圖尚無桌號</option>';
+    list.forEach(function(t){
+      html += '<option value="'+esc(t)+'">桌號 '+esc(t)+'</option>';
+    });
+    sel.innerHTML = html;
+    sel.value = (keep && list.indexOf(keep) !== -1) ? keep : (extra || "");
+    sel.classList.toggle("empty", !sel.value);
+  }
+  /* 姓名選項連動所選桌號:只列出該桌座位圖上已填的人 */
+  function namesOfTable(tableVal){
+    for(var i=0;i<seats.length;i++){
+      if(seats[i].table === tableVal){
+        return seats[i].seats.map(function(s){ return s.n; })
+                             .filter(function(n){ return n; });
+      }
+    }
+    return [];
+  }
+  function fillNameOptions(sel, tableVal, extra){
+    var keep = sel.value;
+    var list = namesOfTable(tableVal);
+    if(extra && list.indexOf(extra) === -1) list.unshift(extra);
+    var ph = !tableVal ? "請先選擇桌號"
+           : list.length ? "選擇姓名"
+           : "此桌座位尚未填姓名";
+    var html = '<option value="">'+ph+'</option>';
+    list.forEach(function(n){ html += '<option value="'+esc(n)+'">'+esc(n)+'</option>'; });
+    sel.innerHTML = html;
+    sel.value = (keep && list.indexOf(keep) !== -1) ? keep : (extra || "");
+    sel.classList.toggle("empty", !sel.value);
+  }
+
+  function syncTableOptions(){
+    fillTableOptions($("fTable"));
+    fillNameOptions($("fName"), $("fTable").value);
+  }
+
   function rowHtml(r){
     var tbl = r.table === "未分桌" ? "未分桌" : "桌 " + r.table;
     var who = r.name === "—" ? "（未填姓名）" : r.name;
@@ -1349,6 +1414,16 @@
 
   // 事件
   $("addBtn").addEventListener("click", add);
+  $("fTable").addEventListener("change", function(){
+    this.classList.toggle("empty", !this.value);
+    fillNameOptions($("fName"), this.value);       // 換桌就換該桌的人
+  });
+  $("fName").addEventListener("change", function(){
+    this.classList.toggle("empty", !this.value);
+  });
+  $("eTable").addEventListener("change", function(){
+    fillNameOptions($("eName"), this.value);
+  });
   [fTable,fName,fItem,fAmt].forEach(function(el){
     el.addEventListener("keydown", function(e){ if(e.key==="Enter") add(); });
   });
