@@ -46,6 +46,20 @@
   header .sub{margin-top:8px;color:var(--muted);font-size:13px;font-weight:500}
   header .sub b{color:var(--green);font-weight:700}
 
+  /* 聚餐地點與時間 */
+  .info{padding:6px 10px 6px 14px;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+  .info-fields{flex:1;min-width:0}
+  .info-row{display:flex;align-items:center;gap:9px;padding:2px 0}
+  .info-row + .info-row{border-top:1px dashed var(--line)}
+  .info-row .ic{font-size:15px;flex:none;width:20px;text-align:center;opacity:.75}
+  .info-row input{
+    flex:1;min-width:0;font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);
+    background:transparent;border:none;padding:11px 2px;border-radius:6px;
+  }
+  .info-row input::placeholder{font-weight:500;color:var(--muted)}
+  .info-row input:focus{outline:none;background:var(--green-soft);padding-left:8px;padding-right:8px}
+  .info-row input:disabled{color:var(--muted);cursor:not-allowed;-webkit-text-fill-color:var(--muted)}
+
   /* 共用帳單 */
   .conn{padding:14px 18px}
   .conn-row{display:flex;gap:8px;align-items:center}
@@ -140,6 +154,52 @@
   }
   .mini-clear:hover{background:#f6dfd9;border-color:var(--danger)}
   .mini-clear.confirm{background:var(--danger);border-color:var(--danger);color:#fff}
+  .mini-lock{
+    font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:6px 11px;transition:.15s;white-space:nowrap;
+  }
+  .mini-lock:hover{border-color:var(--green);color:var(--green)}
+  .mini-lock.on,.lockbtn.on{background:var(--amber);border-color:var(--amber);color:#fff}
+  .lockbtn{white-space:nowrap}
+  .lockbtn.on:hover{background:var(--amber-deep);border-color:var(--amber-deep);color:#fff}
+
+  /* 鎖定時的停用態 */
+  .locked-off{opacity:.5;pointer-events:none}
+  .field input:disabled{background:#f0ede5;color:var(--muted);cursor:not-allowed}
+  .add-btn:disabled{background:var(--muted);cursor:not-allowed;opacity:.6}
+  .actions button:disabled{opacity:.45;cursor:not-allowed}
+  .mini-clear:disabled{opacity:.45;cursor:not-allowed}
+  .svc-toggle input[type=checkbox]:disabled{cursor:not-allowed}
+
+  /* 菜單 */
+  .menu-wrap{padding:14px 16px 8px}
+  #menuText{
+    width:100%;min-height:190px;resize:vertical;
+    font-family:inherit;font-size:15px;line-height:1.65;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  #menuText:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(23,73,58,.12)}
+  #menuText:disabled{background:#f0ede5;color:var(--muted);cursor:not-allowed;
+    -webkit-text-fill-color:var(--ink);opacity:1}
+  #menuPreview{padding:0 16px 16px}
+  #menuPreview:empty{display:none}
+  .mn-title{
+    font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.1em;
+    border-top:1px dashed var(--line);padding-top:12px;margin-bottom:8px;
+  }
+  .mn-line{
+    display:flex;justify-content:space-between;gap:12px;align-items:baseline;
+    padding:7px 2px;border-bottom:1px dashed var(--line);
+  }
+  .mn-line .d{font-size:15px;font-weight:500;min-width:0;word-break:break-word}
+  .mn-line .p{font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700;
+    color:var(--green);flex:none}
+  .mn-img{
+    display:block;width:100%;border-radius:10px;border:1px solid var(--line);
+    margin:8px 0;background:var(--green-soft);
+  }
 
   /* 座位圖 */
   #seatArea{
@@ -310,6 +370,21 @@
     <div class="sub" id="metaLine">尚無紀錄</div>
   </header>
 
+  <!-- 聚餐地點與時間 -->
+  <div class="card info">
+    <div class="info-fields">
+      <div class="info-row">
+        <span class="ic">📍</span>
+        <input id="fPlace" placeholder="聚餐地點" autocomplete="off">
+      </div>
+      <div class="info-row">
+        <span class="ic">🕐</span>
+        <input id="fTime" placeholder="聚餐時間" autocomplete="off">
+      </div>
+    </div>
+    <button class="mini-lock" id="lockInfoBtn" title="鎖定地點時間">🔓</button>
+  </div>
+
   <!-- 雲端同步狀態 -->
   <div class="card conn">
     <div class="conn-row">
@@ -323,6 +398,7 @@
   <div class="tabs" id="tabs">
     <button data-page="order" class="on">🍽️ 點餐</button>
     <button data-page="seat">🪑 座位圖</button>
+    <button data-page="menu">📋 菜單</button>
   </div>
 
   <div id="pageOrder">
@@ -363,7 +439,6 @@
       <div class="seg" id="seg">
         <button data-mode="table" class="on">依桌號</button>
         <button data-mode="name">依姓名</button>
-        <button data-mode="item">依餐點</button>
         <button data-mode="none">全部</button>
       </div>
       <span class="count" id="countLbl">0 筆</span>
@@ -385,11 +460,26 @@
       <div class="line grand"><span class="k">總計</span><span class="v mono"><small>$</small><span id="tGrand">0</span></span></div>
     </div>
     <div class="actions">
+      <button class="lockbtn" id="lockOrderBtn">🔓 鎖定</button>
       <button id="exportBtn">匯出 CSV</button>
       <button class="clear" id="clearBtn">清空全部</button>
     </div>
   </div>
   </div><!-- /pageOrder -->
+
+  <!-- 菜單 -->
+  <div id="pageMenu" hidden>
+    <div class="card">
+      <div class="toolbar">
+        <span class="count" id="menuLbl">貼上菜單</span>
+        <button class="mini-lock" id="lockMenuBtn">🔓 鎖定</button>
+      </div>
+      <div class="menu-wrap">
+        <textarea id="menuText" placeholder="把菜單貼進來,例如:&#10;滷肉飯 60&#10;燙青菜 40&#10;&#10;也可以貼菜單照片的網址,會直接顯示出來"></textarea>
+      </div>
+      <div id="menuPreview"></div>
+    </div>
+  </div>
 
   <!-- 座位圖 -->
   <div id="pageSeat" hidden>
@@ -413,12 +503,29 @@
     <div class="card">
       <div class="toolbar">
         <span class="count" id="seatCountLbl">0 桌</span>
-        <button class="mini-clear" id="clearSeatBtn">清空座位圖</button>
+        <span style="display:flex;gap:8px">
+          <button class="mini-lock" id="lockSeatBtn">🔓 鎖定</button>
+          <button class="mini-clear" id="clearSeatBtn">清空座位圖</button>
+        </span>
       </div>
       <div id="seatArea"></div>
     </div>
   </div>
 </div><!-- /wrap -->
+
+<div class="modal-mask" id="passMask" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="passTitle">解除鎖定</h3>
+    <div class="field full" style="margin-top:0">
+      <label for="passInput">請輸入解鎖密碼</label>
+      <input id="passInput" type="password" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="m-actions">
+      <button class="m-cancel" id="passCancel">取消</button>
+      <button class="m-save" id="passOk">解鎖</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-mask" id="seatMask" hidden>
   <div class="modal" role="dialog" aria-modal="true">
@@ -472,11 +579,16 @@
   var API_URL = "https://script.google.com/macros/s/AKfycbyuls6VD-LfWgp892qFroqstUcCJK61JzYM6mtwoCYz0NUCdtHUasWVGcYRH4WmsE-D/exec";
   /* ▲▲▲ 留空則維持單機模式;填好後即可多人共用同一份帳單 ▲▲▲ */
 
+  /* ▼ 解鎖密碼:鎖定不需密碼,解鎖才需要。請改成你自己的 ▼ */
+  var UNLOCK_PASS = "1234";
+
   var KEY = "feast-orders-v1";
   var SEAT_KEY = "feast-seats-v1";
   var records = load();
   var seats = loadSeats();
   var page = "order";
+  var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false;
+  var pendingUnlock = null;
   var seatEditing = null;
   var lockTimer = null;
   var LOCK_PING_MS = 15000;
@@ -562,6 +674,7 @@
   }
 
   function add(){
+    if(lockOrder){ toast("點餐已鎖定,需解鎖才能修改"); return; }
     var table = fTable.value.trim();
     var name  = fName.value.trim();
     var item  = fItem.value.trim();
@@ -587,6 +700,7 @@
   }
 
   function del(id){
+    if(lockOrder){ toast("點餐已鎖定,需解鎖才能修改"); return; }
     if(online){
       mutate({ action:"delete", bill:billCode, id:id }).catch(function(){ toast("刪除失敗"); });
       return;
@@ -600,6 +714,7 @@
     return null;
   }
   function openEdit(id){
+    if(lockOrder){ toast("點餐已鎖定,需解鎖才能修改"); return; }
     var r = findRec(id); if(!r) return;
     editingId = id;
     $("eTable").value = r.table === "未分桌" ? "" : r.table;
@@ -683,14 +798,14 @@
     if(mode === "none"){
       html += records.map(rowHtml).join("");
     }else{
-      var groups = mode === "table" ? groupBy(function(r){ return r.table; })
-                 : mode === "name"  ? groupBy(function(r){ return r.name; })
-                 : groupBy(function(r){ return r.item; });
+      var groups = mode === "table"
+        ? groupBy(function(r){ return r.table; })
+        : groupBy(function(r){ return r.name; });
       groups.forEach(function(g){
         var sub = g.items.reduce(function(s,r){ return s + r.amt; },0);
         var label = mode==="table" ? "桌號 "+esc(g.key) : esc(g.key);
-        var tag = (mode==="table" || mode==="item")
-          ? '<span class="tag">'+g.items.length+(mode==="item"?" 份":" 筆")+'</span>'
+        var tag = mode==="table"
+          ? '<span class="tag">'+g.items.length+' 筆</span>'
           : '';
         html += '<div class="group-head">'+
                   '<span class="g-name">'+label+tag+'</span>'+
@@ -729,7 +844,7 @@
       html += '<div class="tbl">'+
         '<div class="tbl-head">'+
           '<span class="n">桌號 '+esc(t.table)+'<small>'+filled+' / '+t.seats.length+' 人</small></span>'+
-          '<button class="x" data-rmt="'+ti+'" title="刪除此桌">✕</button>'+
+          (lockSeat ? '' : '<button class="x" data-rmt="'+ti+'" title="刪除此桌">✕</button>')+
         '</div>'+
         '<div class="round">'+
           '<div class="top"><span class="t1">'+esc(t.table)+'</span><span class="t2">'+t.seats.length+' 席</span></div>';
@@ -770,6 +885,7 @@
     });
     Array.prototype.forEach.call(area.querySelectorAll("[data-rmt]"), function(el){
       el.addEventListener("click", function(){
+        if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
         var i = +el.getAttribute("data-rmt");
         if(!seats[i]) return;
         var t = seats[i].table;
@@ -780,6 +896,7 @@
   }
 
   function addTable(){
+    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
     var t = $("sTable").value.trim();
     var c = parseInt($("sCount").value, 10);
     if(!t){ toast("請填寫桌號"); $("sTable").focus(); return; }
@@ -800,6 +917,7 @@
   }
 
   function openSeat(ti, si){
+    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
     var t = seats[ti]; if(!t) return;
     var st = t.seats[si]; if(!st) return;
     if(st.lk && st.lk !== myId){ toast("這個位置有人正在填寫"); return; }
@@ -859,6 +977,7 @@
 
   var seatClearArmed = false, seatClearTimer = null;
   function clearSeats(){
+    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能清空"); return; }
     var btn = $("clearSeatBtn");
     if(!seatClearArmed){
       seatClearArmed = true;
@@ -884,26 +1003,181 @@
     page = p;
     $("pageOrder").hidden = p !== "order";
     $("pageSeat").hidden = p !== "seat";
+    $("pageMenu").hidden = p !== "menu";
     Array.prototype.forEach.call($("tabs").children, function(b){
       b.classList.toggle("on", b.getAttribute("data-page") === p);
     });
     if(p === "seat") renderSeats();
   }
 
+  /* ── 鎖定 ─────────────────────────────
+     鎖定不需密碼(誰都能鎖),解鎖才要密碼。鎖定狀態同步給所有人。 */
+  var LOCK_NAME = { order:"點餐", seat:"座位圖", info:"地點時間", menu:"菜單" };
+  function isLocked(which){
+    return which === "seat" ? lockSeat
+         : which === "info" ? lockInfo
+         : which === "menu" ? lockMenu
+         : lockOrder;
+  }
+
+  function toggleLock(which){
+    if(isLocked(which)){
+      pendingUnlock = which;
+      $("passTitle").textContent = "解除「"+LOCK_NAME[which]+"」鎖定";
+      $("passInput").value = "";
+      $("passMask").hidden = false;
+      $("passInput").focus();
+      return;
+    }
+    setLock(which, true);
+    toast(LOCK_NAME[which] + "已鎖定");
+  }
+
+  function setLock(which, on){
+    if(which === "seat"){ lockSeat = on; }
+    else if(which === "info"){ lockInfo = on; }
+    else if(which === "menu"){ lockMenu = on; }
+    else { lockOrder = on; }
+    applyLockUI();
+    if(online){
+      mutate({ action:"lock", bill:billCode, which:which, on:on })
+        .catch(function(){ toast("鎖定同步失敗"); });
+    }else{
+      try{ localStorage.setItem("feast-lock-"+which, on ? "1" : "0"); }catch(e){}
+    }
+  }
+
+  function submitPass(){
+    if(!pendingUnlock) return;
+    if($("passInput").value !== UNLOCK_PASS){
+      toast("密碼錯誤");
+      $("passInput").value = "";
+      $("passInput").focus();
+      return;
+    }
+    var which = pendingUnlock;
+    closePass();
+    setLock(which, false);
+    toast(LOCK_NAME[which] + "已解鎖");
+  }
+  function closePass(){ pendingUnlock = null; $("passMask").hidden = true; }
+
+  /* 依鎖定狀態停用對應頁面的所有輸入 */
+  function applyLockUI(){
+    var ob = $("lockOrderBtn"), sb = $("lockSeatBtn");
+    ob.textContent = lockOrder ? "🔒 已鎖定" : "🔓 鎖定";
+    ob.classList.toggle("on", lockOrder);
+    sb.textContent = lockSeat ? "🔒 已鎖定" : "🔓 鎖定";
+    sb.classList.toggle("on", lockSeat);
+
+    ["fTable","fName","fItem","fAmt","addBtn","svcChk"].forEach(function(id){
+      $(id).disabled = lockOrder;
+    });
+    $("svcLine").classList.toggle("locked-off", lockOrder);
+    $("clearBtn").disabled = lockOrder;
+    $("clearBtn").classList.toggle("locked-off", lockOrder);
+
+    ["sTable","sCount","addTableBtn"].forEach(function(id){ $(id).disabled = lockSeat; });
+    $("clearSeatBtn").disabled = lockSeat;
+    $("clearSeatBtn").classList.toggle("locked-off", lockSeat);
+
+    var ib = $("lockInfoBtn");
+    ib.textContent = lockInfo ? "🔒" : "🔓";
+    ib.classList.toggle("on", lockInfo);
+    $("fPlace").disabled = lockInfo;
+    $("fTime").disabled = lockInfo;
+
+    var mb = $("lockMenuBtn");
+    mb.textContent = lockMenu ? "🔒 已鎖定" : "🔓 鎖定";
+    mb.classList.toggle("on", lockMenu);
+    $("menuText").disabled = lockMenu;
+  }
+
+  /* ── 聚餐地點與時間 ─────────────────
+     打字時延遲送出,並避免輪詢覆蓋正在編輯中的欄位 */
+  var infoTimer = null;
+  function scheduleInfoSave(){
+    clearTimeout(infoTimer);
+    infoTimer = setTimeout(saveInfo, 700);
+  }
+  function saveInfo(){
+    var place = $("fPlace").value.trim();
+    var time  = $("fTime").value.trim();
+    if(online){
+      mutate({ action:"info", bill:billCode, place:place, time:time })
+        .catch(function(){ toast("地點時間同步失敗"); });
+    }else{
+      try{
+        localStorage.setItem("feast-place", place);
+        localStorage.setItem("feast-time", time);
+      }catch(e){}
+    }
+  }
+  function fillInfo(place, time){
+    // 欄位正在編輯中就不覆蓋,避免打到一半被同步的資料洗掉
+    if(document.activeElement !== $("fPlace")) $("fPlace").value = place || "";
+    if(document.activeElement !== $("fTime"))  $("fTime").value  = time  || "";
+  }
+
+  /* ── 菜單 ─────────────────────────── */
+  var menuTimer = null;
+  var IMG_RE = /^https?:\/\/\S+\.(png|jpe?g|webp|gif|avif)(\?\S*)?$/i;
+
+  function scheduleMenuSave(){
+    clearTimeout(menuTimer);
+    menuTimer = setTimeout(saveMenu, 700);
+  }
+  function saveMenu(){
+    var text = $("menuText").value;
+    if(online){
+      mutate({ action:"menu", bill:billCode, text:text })
+        .catch(function(){ toast("菜單同步失敗"); });
+    }else{
+      try{ localStorage.setItem("feast-menu", text); }catch(e){}
+    }
+  }
+  function fillMenu(text){
+    if(document.activeElement !== $("menuText")) $("menuText").value = text || "";
+    renderMenu();
+  }
+  /* 每行拆成「品名 + 價格」;整行是圖片網址就直接顯示圖片 */
+  function renderMenu(){
+    var raw = $("menuText").value || "";
+    var box = $("menuPreview");
+    var lines = raw.split(/\r?\n/).map(function(l){ return l.trim(); })
+                   .filter(function(l){ return l; });
+    if(!lines.length){ box.innerHTML = ""; return; }
+    var html = '<div class="mn-title">預覽</div>';
+    lines.forEach(function(l){
+      if(IMG_RE.test(l)){
+        html += '<img class="mn-img" src="'+esc(l)+'" alt="菜單" loading="lazy">';
+        return;
+      }
+      var m = l.match(/^(.*?)[\s\.\-–—:：]*\$?\s*(\d+(?:\.\d+)?)\s*(?:元)?$/);
+      if(m && m[1].trim()){
+        html += '<div class="mn-line"><span class="d">'+esc(m[1].trim())+
+                '</span><span class="p">$'+money(parseFloat(m[2]))+'</span></div>';
+      }else{
+        html += '<div class="mn-line"><span class="d">'+esc(l)+'</span></div>';
+      }
+    });
+    box.innerHTML = html;
+  }
+
   function rowHtml(r){
     var tbl = r.table === "未分桌" ? "未分桌" : "桌 " + r.table;
     var who = r.name === "—" ? "（未填姓名）" : r.name;
     var secondary, primary;
-    if(mode === "item"){ secondary = tbl; primary = who; }
-    else if(mode === "name"){ secondary = tbl; primary = r.item; }
+    if(mode === "name"){ secondary = tbl; primary = r.item; }
     else { secondary = who; primary = r.item; }
     return '<div class="item">'+
       '<div><div class="who">'+esc(secondary)+'</div><div class="what">'+esc(primary)+'</div></div>'+
       '<div class="amt mono">$'+money(r.amt)+'</div>'+
-      '<div class="ops">'+
-        '<button class="edit" data-edit="'+r.id+'" title="編輯">✎</button>'+
-        '<button class="del" data-id="'+r.id+'" title="刪除">✕</button>'+
-      '</div>'+
+      (lockOrder ? '' :
+        '<div class="ops">'+
+          '<button class="edit" data-edit="'+r.id+'" title="編輯">✎</button>'+
+          '<button class="del" data-id="'+r.id+'" title="刪除">✕</button>'+
+        '</div>')+
     '</div>';
   }
 
@@ -938,6 +1212,7 @@
   }
 
   function clearAll(){
+    if(lockOrder){ toast("點餐已鎖定,需解鎖才能清空"); return; }
     var btn = $("clearBtn");
     if(!clearArmed){
       clearArmed = true;
@@ -1019,9 +1294,19 @@
     if(pendingWrites > 0) return;
     if(issuedAt && issuedAt < lastMutation) return;
 
-    var sig = JSON.stringify([data.orders, data.svc, data.seats]);
+    var sig = JSON.stringify([data.orders, data.svc, data.seats, data.lockOrder,
+                              data.lockSeat, data.lockInfo, data.lockMenu, data.place,
+                              data.time, data.menu]);
     if(sig === lastSig) return;
     lastSig = sig;
+
+    lockOrder = !!data.lockOrder;
+    lockSeat = !!data.lockSeat;
+    lockInfo = !!data.lockInfo;
+    lockMenu = !!data.lockMenu;
+    applyLockUI();
+    fillInfo(data.place, data.time);
+    fillMenu(data.menu);
 
     records = (data.orders || []).map(function(x){
       return { id:String(x.id), table:x.table, name:x.name, item:x.item, amt:Number(x.amt) };
@@ -1076,6 +1361,7 @@
   $("exportBtn").addEventListener("click", exportCSV);
   $("clearBtn").addEventListener("click", clearAll);
   $("svcChk").addEventListener("change", function(){
+    if(lockOrder){ this.checked = svc; toast("點餐已鎖定"); return; }
     svc = this.checked;
     if(online){
       mutate({ action:"svc", bill:billCode, svc: svc }).catch(function(){ toast("同步失敗"); });
@@ -1086,6 +1372,23 @@
   });
   $("eSave").addEventListener("click", saveEdit);
   $("eCancel").addEventListener("click", closeEdit);
+  $("lockOrderBtn").addEventListener("click", function(){ toggleLock("order"); });
+  $("lockSeatBtn").addEventListener("click", function(){ toggleLock("seat"); });
+  $("lockInfoBtn").addEventListener("click", function(){ toggleLock("info"); });
+  $("lockMenuBtn").addEventListener("click", function(){ toggleLock("menu"); });
+  [$("fPlace"), $("fTime")].forEach(function(el){
+    el.addEventListener("input", scheduleInfoSave);
+    el.addEventListener("blur", saveInfo);
+  });
+  $("menuText").addEventListener("input", function(){ renderMenu(); scheduleMenuSave(); });
+  $("menuText").addEventListener("blur", saveMenu);
+  $("passOk").addEventListener("click", submitPass);
+  $("passCancel").addEventListener("click", closePass);
+  $("passMask").addEventListener("click", function(e){ if(e.target === this) closePass(); });
+  $("passInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter") submitPass();
+    if(e.key === "Escape") closePass();
+  });
   $("tabs").addEventListener("click", function(e){
     var b = e.target.closest("button"); if(!b) return;
     switchPage(b.getAttribute("data-page"));
@@ -1122,6 +1425,17 @@
     });
   });
 
+  try{
+    lockOrder = localStorage.getItem("feast-lock-order") === "1";
+    lockSeat  = localStorage.getItem("feast-lock-seat") === "1";
+    lockInfo  = localStorage.getItem("feast-lock-info") === "1";
+    lockMenu  = localStorage.getItem("feast-lock-menu") === "1";
+    if(!backendReady()){
+      fillInfo(localStorage.getItem("feast-place"), localStorage.getItem("feast-time"));
+      fillMenu(localStorage.getItem("feast-menu"));
+    }
+  }catch(e){}
+  applyLockUI();
   updateConnUI();
   renderSeats();
   if(backendReady()){
