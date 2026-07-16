@@ -850,15 +850,21 @@
       var groups = mode === "table"
         ? groupBy(function(r){ return r.table; })
         : groupBy(function(r){ return r.name; });
-      groups.forEach(function(g){
+      // 勾了服務費,各組小計也一起含進去,直接照小計分帳;並確保相加等於總計
+      var exact = groups.map(function(g){
         var sub = g.items.reduce(function(s,r){ return s + r.amt; },0);
+        return svc ? sub * (1 + SVC_RATE) : sub;
+      });
+      var shown = allocate(exact, payable);
+      var subLabel = svc ? "小計含服務費" : "小計";
+      groups.forEach(function(g, gi){
         var label = mode==="table" ? "桌號 "+esc(g.key) : esc(g.key);
         var tag = mode==="table"
           ? '<span class="tag">'+g.items.length+' 筆</span>'
           : '';
         html += '<div class="group-head">'+
                   '<span class="g-name">'+label+tag+'</span>'+
-                  '<span class="g-sub mono">小計 <b>$'+money(sub)+'</b></span>'+
+                  '<span class="g-sub mono">'+subLabel+' <b>$'+money(shown[gi])+'</b></span>'+
                 '</div>'+
                 '<div class="dashed"></div>'+
                 g.items.map(rowHtml).join("");
@@ -1288,6 +1294,24 @@
     el.textContent = "桌號 "+t+" 目前有 "+ppl.length+" 人可選。點完一筆會保留桌號與姓名,同一人可連續點餐。";
   }
 
+  /* 把各組金額湊成整數,且相加剛好等於 target。
+     直接各自四捨五入的話,各桌小計加起來會跟總計差個一兩塊(分帳時會被抓包),
+     所以先無條件捨去,再把剩下的零頭依小數大小依序補給各組。 */
+  function allocate(vals, target){
+    var floors = vals.map(function(v){ return Math.floor(v); });
+    var used = floors.reduce(function(a,b){ return a + b; }, 0);
+    var rem = Math.round(target - used);
+    var n = vals.length;
+    if(!n) return floors;
+    var order = vals.map(function(v,i){ return { i:i, f: v - Math.floor(v) }; });
+    order.sort(function(a,b){ return b.f - a.f; });
+    var k = 0;
+    while(rem > 0){ floors[order[k % n].i]++; rem--; k++; }
+    k = 0;
+    while(rem < 0){ floors[order[n - 1 - (k % n)].i]--; rem++; k++; }
+    return floors;
+  }
+
   function rowHtml(r){
     var tbl = r.table === "未分桌" ? "未分桌" : "桌 " + r.table;
     var who = r.name === "—" ? "（未填姓名）" : r.name;
@@ -1310,6 +1334,21 @@
     var rows = [["桌號","姓名","餐點","金額"]];
     records.forEach(function(r){ rows.push([r.table, r.name, r.item, r.amt]); });
     var grand = records.reduce(function(s,r){ return s + r.amt; },0);
+
+    // 各桌小計(與畫面一致:勾了服務費就含進去,且相加等於總計)
+    var gs = groupBy(function(r){ return r.table; });
+    var exactCsv = gs.map(function(g){
+      var sub = g.items.reduce(function(s,r){ return s + r.amt; },0);
+      return svc ? sub * (1 + SVC_RATE) : sub;
+    });
+    var target = svc ? grand + Math.round(grand * SVC_RATE) : grand;
+    var shownCsv = allocate(exactCsv, target);
+    rows.push(["","","",""]);
+    gs.forEach(function(g, gi){
+      rows.push(["桌號 "+g.key, "", svc ? "小計含服務費" : "小計", shownCsv[gi]]);
+    });
+
+    rows.push(["","","",""]);
     if(svc){
       var fee = Math.round(grand * SVC_RATE);
       rows.push(["","","餐點小計", grand]);
