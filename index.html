@@ -644,7 +644,10 @@
   var online = false, billCode = "";
   var FIXED_BILL = "feast-shared";
   var pollTimer = null;
-  var POLL_MS = 1500;
+  var POLL_MS = 1200;             // rev 查詢很輕,可以問密一點
+  var FULL_EVERY_MS = 15000;      // 保險:最久 15 秒完整同步一次
+  var lastRev = "";
+  var lastFullAt = 0;
   var lastMutation = 0;
   var pendingWrites = 0;
   var polling = false;
@@ -1351,6 +1354,7 @@
     return apiPost(payload).then(function(data){
       pendingWrites--;
       lastMutation = Date.now();
+      if(data && data.rev){ lastRev = String(data.rev); lastFullAt = Date.now(); }
       applyData(data);
       return data;
     }).catch(function(err){
@@ -1394,15 +1398,35 @@
     if(page === "seat") renderSeats();
   }
 
+  /* 先問 rev(極輕量);沒變就不抓資料。
+     另外每 15 秒仍強制完整抓一次,作為座位鎖逾時等「時間到期但無人寫入」情況的保險。 */
+  function fetchFull(){
+    return fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        lastFullAt = Date.now();
+        if(data && data.rev) lastRev = String(data.rev);
+        applyData(data, lastFullAt);
+      });
+  }
+
   function poll(){
     if(!online || polling || pendingWrites > 0) return;
     if(document.hidden) return;      // 沒在看就不打,切回來時會立即補抓一次
     polling = true;
-    var issuedAt = Date.now();
-    fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
-      .then(function(r){ return r.json(); })
-      .then(function(data){ polling = false; applyData(data, issuedAt); })
-      .catch(function(){ polling = false; });
+
+    var needFull = !lastRev || (Date.now() - lastFullAt) > FULL_EVERY_MS;
+    var job = needFull
+      ? fetchFull()
+      : fetch(API_URL + "?action=rev&bill=" + encodeURIComponent(billCode))
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if(!d || String(d.rev) === lastRev) return;   // 沒人動過 → 結束,不抓資料
+            return fetchFull();
+          });
+
+    job.catch(function(){ /* 靜默,下一輪重試 */ })
+       .then(function(){ polling = false; });
   }
 
   function teardown(){
@@ -1414,6 +1438,7 @@
     teardown();
     billCode = FIXED_BILL;
     online = true;
+    lastRev = ""; lastFullAt = 0;
     updateConnUI();
     poll();
     pollTimer = setInterval(poll, POLL_MS);
