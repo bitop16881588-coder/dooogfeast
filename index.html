@@ -504,11 +504,11 @@
     try{ var r = JSON.parse(localStorage.getItem(SEAT_KEY)); return Array.isArray(r)? r : []; }
     catch(e){ return []; }
   }
-  function saveSeats(){
-    renderSeats();                       // 先本地即時反映,不等雲端
+  /* 座位改動:先本地即時反映,再只送出這一次的異動(不整張覆蓋) */
+  function afterSeatChange(payload){
+    renderSeats();
     if(online){
-      mutate({ action:"seats", bill:billCode, seats: JSON.stringify(seats) })
-        .catch(function(){ toast("座位同步失敗,請稍後再試"); });
+      mutate(payload).catch(function(){ toast("座位同步失敗,請稍後再試"); });
     }else{
       try{ localStorage.setItem(SEAT_KEY, JSON.stringify(seats)); }catch(e){}
     }
@@ -724,7 +724,10 @@
     Array.prototype.forEach.call(area.querySelectorAll("[data-rmt]"), function(el){
       el.addEventListener("click", function(){
         var i = +el.getAttribute("data-rmt");
-        seats.splice(i,1); saveSeats();
+        if(!seats[i]) return;
+        var t = seats[i].table;
+        seats.splice(i,1);
+        afterSeatChange({ action:"tableDel", bill:billCode, table:t });
       });
     });
   }
@@ -740,7 +743,7 @@
     for(var i=0;i<c;i++) arr.push("");
     seats.push({ table:t, seats:arr });
     $("sTable").value=""; $("sCount").value="";
-    saveSeats();
+    afterSeatChange({ action:"tableAdd", bill:billCode, table:t, count:c });
     toast("已新增桌號 "+t);
   }
 
@@ -755,9 +758,12 @@
   function saveSeat(){
     if(!seatEditing) return;
     var t = seats[seatEditing.t];
-    if(t) t.seats[seatEditing.s] = $("sName").value.trim();
+    if(!t){ closeSeat(); return; }
+    var idx = seatEditing.s;
+    var nm = $("sName").value.trim();
+    t.seats[idx] = nm;
     closeSeat();
-    saveSeats();
+    afterSeatChange({ action:"seatSet", bill:billCode, table:t.table, idx:idx, name:nm });
   }
 
   var seatClearArmed = false, seatClearTimer = null;
@@ -771,7 +777,7 @@
       return;
     }
     seats = [];
-    saveSeats();
+    afterSeatChange({ action:"seatsClear", bill:billCode });
     resetSeatClear();
     toast("已清空座位圖");
   }
@@ -931,8 +937,10 @@
     });
     svc = !!data.svc;
     if(!seatEditing){
-      var incoming = [];
-      try{ incoming = data.seats ? JSON.parse(data.seats) : []; }catch(e){ incoming = []; }
+      var incoming = data.seats;
+      if(typeof incoming === "string"){
+        try{ incoming = JSON.parse(incoming); }catch(e){ incoming = []; }
+      }
       if(Array.isArray(incoming)) seats = incoming;
     }
     render();
