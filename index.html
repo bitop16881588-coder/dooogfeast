@@ -414,12 +414,12 @@
 
   <!-- 分頁 -->
   <div class="tabs" id="tabs">
-    <button data-page="order" class="on">🍽️ 點餐</button>
-    <button data-page="seat">🪑 座位圖</button>
+    <button data-page="seat" class="on">🪑 座位圖</button>
+    <button data-page="order">🍽️ 點餐</button>
     <button data-page="menu">📋 菜單</button>
   </div>
 
-  <div id="pageOrder">
+  <div id="pageOrder" hidden>
 
   <!-- 輸入 -->
   <div class="card">
@@ -500,7 +500,7 @@
   </div>
 
   <!-- 座位圖 -->
-  <div id="pageSeat" hidden>
+  <div id="pageSeat">
     <div class="card">
       <div class="entry">
         <div class="row">
@@ -604,7 +604,7 @@
   var SEAT_KEY = "feast-seats-v1";
   var records = load();
   var seats = loadSeats();
-  var page = "order";
+  var page = "seat";
   var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false;
   var pendingUnlock = null;
   var seatEditing = null;
