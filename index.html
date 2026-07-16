@@ -480,6 +480,10 @@
   var FIXED_BILL = "feast-shared";
   var pollTimer = null;
   var POLL_MS = 3000;
+  var lastMutation = 0;
+  var pendingWrites = 0;
+  var polling = false;
+  var lastSig = "";
 
   function backendReady(){
     return !!(API_URL && API_URL.indexOf("http") === 0);
@@ -501,13 +505,13 @@
     catch(e){ return []; }
   }
   function saveSeats(){
+    renderSeats();                       // 先本地即時反映,不等雲端
     if(online){
-      apiPost({ action:"seats", bill:billCode, seats: JSON.stringify(seats) })
-        .catch(function(){ toast("座位同步失敗"); });
+      mutate({ action:"seats", bill:billCode, seats: JSON.stringify(seats) })
+        .catch(function(){ toast("座位同步失敗,請稍後再試"); });
     }else{
       try{ localStorage.setItem(SEAT_KEY, JSON.stringify(seats)); }catch(e){}
     }
-    renderSeats();
   }
   function money(n){
     return Math.round(n).toLocaleString("en-US");
@@ -533,8 +537,8 @@
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); fAmt.focus(); return; }
     var rec = { table: table, name: name, item: item, amt: amt };
     if(online){
-      apiPost({ action:"add", bill:billCode, table:rec.table, name:rec.name, item:rec.item, amt:rec.amt })
-        .then(function(){ toast("已新增"); poll(); })
+      mutate({ action:"add", bill:billCode, table:rec.table, name:rec.name, item:rec.item, amt:rec.amt })
+        .then(function(){ toast("已新增"); })
         .catch(function(){ toast("新增失敗,請確認連線"); });
     }else{
       rec.id = Date.now() + "-" + Math.random().toString(36).slice(2,6);
@@ -549,7 +553,7 @@
 
   function del(id){
     if(online){
-      apiPost({ action:"delete", bill:billCode, id:id }).then(poll).catch(function(){ toast("刪除失敗"); });
+      mutate({ action:"delete", bill:billCode, id:id }).catch(function(){ toast("刪除失敗"); });
       return;
     }
     records = records.filter(function(r){ return r.id !== id; });
@@ -582,8 +586,8 @@
     if(isNaN(amt) || amt < 0){ toast("請填寫正確金額"); $("eAmt").focus(); return; }
     var data = { table: table, name: name, item: item, amt: amt };
     if(online){
-      apiPost({ action:"update", bill:billCode, id:editingId, table:data.table, name:data.name, item:data.item, amt:data.amt })
-        .then(function(){ toast("已更新"); poll(); })
+      mutate({ action:"update", bill:billCode, id:editingId, table:data.table, name:data.name, item:data.item, amt:data.amt })
+        .then(function(){ toast("已更新"); })
         .catch(function(){ toast("更新失敗"); });
       closeEdit();
       return;
@@ -846,8 +850,8 @@
       return;
     }
     if(online){
-      apiPost({ action:"clear", bill:billCode })
-        .then(function(){ toast("已清空全部紀錄"); poll(); })
+      mutate({ action:"clear", bill:billCode })
+        .then(function(){ toast("已清空全部紀錄"); })
         .catch(function(){ toast("清空失敗"); });
       resetClear();
       return;
@@ -896,25 +900,53 @@
     }).then(function(r){ return r.json(); });
   }
 
+  /* 本地寫入:標記時間戳,期間拒絕套用任何較舊的輪詢結果,避免新增被蓋掉 */
+  function mutate(payload){
+    lastMutation = Date.now();
+    pendingWrites++;
+    return apiPost(payload).then(function(data){
+      pendingWrites--;
+      lastMutation = Date.now();
+      applyData(data);
+      return data;
+    }).catch(function(err){
+      pendingWrites--;
+      throw err;
+    });
+  }
+
+  /* 套用雲端資料:過期或寫入中一律不套用;內容沒變就不重繪(避免打字卡頓) */
+  function applyData(data, issuedAt){
+    if(!online || !data) return;
+    if(data.bill && data.bill !== billCode) return;
+    if(pendingWrites > 0) return;
+    if(issuedAt && issuedAt < lastMutation) return;
+
+    var sig = JSON.stringify([data.orders, data.svc, data.seats]);
+    if(sig === lastSig) return;
+    lastSig = sig;
+
+    records = (data.orders || []).map(function(x){
+      return { id:String(x.id), table:x.table, name:x.name, item:x.item, amt:Number(x.amt) };
+    });
+    svc = !!data.svc;
+    if(!seatEditing){
+      var incoming = [];
+      try{ incoming = data.seats ? JSON.parse(data.seats) : []; }catch(e){ incoming = []; }
+      if(Array.isArray(incoming)) seats = incoming;
+    }
+    render();
+    if(page === "seat") renderSeats();
+  }
+
   function poll(){
-    if(!online) return;
+    if(!online || polling || pendingWrites > 0) return;
+    polling = true;
+    var issuedAt = Date.now();
     fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
       .then(function(r){ return r.json(); })
-      .then(function(data){
-        if(!online || (data.bill && data.bill !== billCode)) return;
-        records = (data.orders || []).map(function(x){
-          return { id:String(x.id), table:x.table, name:x.name, item:x.item, amt:Number(x.amt) };
-        });
-        svc = !!data.svc;
-        if(!seatEditing){
-          var incoming = [];
-          try{ incoming = data.seats ? JSON.parse(data.seats) : []; }catch(e){ incoming = []; }
-          if(Array.isArray(incoming)) seats = incoming;
-        }
-        render();
-        if(page === "seat") renderSeats();
-      })
-      .catch(function(){ /* 靜默,下一輪重試 */ });
+      .then(function(data){ polling = false; applyData(data, issuedAt); })
+      .catch(function(){ polling = false; });
   }
 
   function teardown(){
@@ -948,7 +980,7 @@
   $("svcChk").addEventListener("change", function(){
     svc = this.checked;
     if(online){
-      apiPost({ action:"svc", bill:billCode, svc: svc }).catch(function(){ toast("同步失敗"); });
+      mutate({ action:"svc", bill:billCode, svc: svc }).catch(function(){ toast("同步失敗"); });
     }else{
       localStorage.setItem("feast-svc", svc ? "1" : "0");
     }
