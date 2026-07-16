@@ -626,7 +626,7 @@
   var online = false, billCode = "";
   var FIXED_BILL = "feast-shared";
   var pollTimer = null;
-  var POLL_MS = 3000;
+  var POLL_MS = 1500;
   var lastMutation = 0;
   var pendingWrites = 0;
   var polling = false;
@@ -1098,7 +1098,7 @@
   var infoTimer = null;
   function scheduleInfoSave(){
     clearTimeout(infoTimer);
-    infoTimer = setTimeout(saveInfo, 700);
+    infoTimer = setTimeout(saveInfo, 350);
   }
   function saveInfo(){
     var place = $("fPlace").value.trim();
@@ -1125,7 +1125,7 @@
 
   function scheduleMenuSave(){
     clearTimeout(menuTimer);
-    menuTimer = setTimeout(saveMenu, 700);
+    menuTimer = setTimeout(saveMenu, 350);
   }
   function saveMenu(){
     var text = $("menuText").value;
@@ -1324,6 +1324,7 @@
 
   function poll(){
     if(!online || polling || pendingWrites > 0) return;
+    if(document.hidden) return;      // 沒在看就不打,切回來時會立即補抓一次
     polling = true;
     var issuedAt = Date.now();
     fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
@@ -1389,6 +1390,11 @@
     if(e.key === "Enter") submitPass();
     if(e.key === "Escape") closePass();
   });
+  // 切回這個分頁或視窗時立刻同步一次,不必等下一輪
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden) poll();
+  });
+  window.addEventListener("focus", poll);
   $("tabs").addEventListener("click", function(e){
     var b = e.target.closest("button"); if(!b) return;
     switchPage(b.getAttribute("data-page"));
