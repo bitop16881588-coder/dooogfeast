@@ -73,6 +73,7 @@
   .conn-status.off{color:var(--muted)}
   .conn-status.warn{color:var(--amber-deep)}
   .conn-hint{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.55}
+  .conn-hint.warn{color:var(--amber-deep);font-weight:700}
 
   /* 卡片 */
   .card{
@@ -162,7 +163,6 @@
     border-radius:12px;padding:6px 11px;transition:.15s;
   }
   .mini-clear:hover{background:#F6E7E9;border-color:var(--danger)}
-  .mini-clear.confirm{background:var(--danger);border-color:var(--danger);color:#fff}
   .mini-lock{
     font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;
     background:#fff;border:2px solid var(--line);color:var(--muted);
@@ -366,7 +366,6 @@
   .actions button:active{transform:translateY(3px);box-shadow:0 0 0 var(--press)}
   .actions .clear{color:var(--danger);border-color:#E6CBD0}
   .actions .clear:hover{background:#F6E7E9;border-color:var(--danger);color:var(--danger)}
-  .actions .clear.confirm{background:var(--danger);color:#fff;border-color:var(--danger)}
 
   .toast{
     position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(80px);
@@ -434,6 +433,7 @@
           <select id="fName"></select>
         </div>
       </div>
+      <div class="conn-hint" id="orderHint" style="margin-top:9px"></div>
       <div class="field full">
         <label for="fItem">餐點內容 <em>*</em></label>
         <input id="fItem" placeholder="滷肉飯、燙青菜…" autocomplete="off">
@@ -502,6 +502,18 @@
   <!-- 座位圖 -->
   <div id="pageSeat">
     <div class="card">
+      <div class="toolbar">
+        <span class="count" id="seatCountLbl">0 桌</span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="mini-lock" id="lockSeatBtn" title="鎖定桌號與人數">🔓 桌號人數</button>
+          <button class="mini-lock" id="lockNameBtn" title="鎖定座位姓名">🔓 姓名</button>
+          <button class="mini-clear" id="clearSeatBtn">清空座位圖</button>
+        </span>
+      </div>
+      <div id="seatArea"></div>
+    </div>
+
+    <div class="card">
       <div class="entry">
         <div class="row">
           <div class="field">
@@ -514,19 +526,8 @@
           </div>
         </div>
         <button class="add-btn" id="addTableBtn">＋ 新增一桌</button>
-        <div class="conn-hint" style="margin-top:10px">點座位即可填寫姓名,填過的名字會自動帶出該人的點餐金額。</div>
+        <div class="conn-hint" style="margin-top:10px">建好桌之後,點上面的座位填姓名。這裡填的桌號與姓名,就是「點餐」頁可以選的選項。</div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="toolbar">
-        <span class="count" id="seatCountLbl">0 桌</span>
-        <span style="display:flex;gap:8px">
-          <button class="mini-lock" id="lockSeatBtn">🔓 鎖定</button>
-          <button class="mini-clear" id="clearSeatBtn">清空座位圖</button>
-        </span>
-      </div>
-      <div id="seatArea"></div>
     </div>
   </div>
 </div><!-- /wrap -->
@@ -535,7 +536,7 @@
   <div class="modal" role="dialog" aria-modal="true">
     <h3 id="passTitle">解除鎖定</h3>
     <div class="field full" style="margin-top:0">
-      <label for="passInput">請輸入解鎖密碼</label>
+      <label for="passInput">請輸入密碼</label>
       <input id="passInput" type="password" inputmode="numeric" autocomplete="off">
     </div>
     <div class="m-actions">
@@ -552,6 +553,7 @@
       <label for="sName">姓名</label>
       <input id="sName" placeholder="留空可清除此座位" autocomplete="off">
     </div>
+    <div class="conn-hint">填好的姓名會成為「點餐」頁的選項,座位上也會顯示這個人的消費金額。</div>
     <div class="m-actions">
       <button class="m-cancel" id="sCancel">取消</button>
       <button class="m-save" id="sSave">儲存</button>
@@ -605,8 +607,8 @@
   var records = load();
   var seats = loadSeats();
   var page = "seat";
-  var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false;
-  var pendingUnlock = null;
+  var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false, lockName = false;
+  var passIntent = null;   // {run:要執行的動作}
   var seatEditing = null;
   var lockTimer = null;
   var LOCK_PING_MS = 15000;
@@ -638,7 +640,6 @@
   var mode = "table";
   var svc = localStorage.getItem("feast-svc") === "1";
   var SVC_RATE = 0.10;
-  var clearArmed = false;
   var editingId = null;
 
   var online = false, billCode = "";
@@ -656,7 +657,6 @@
   function backendReady(){
     return !!(API_URL && API_URL.indexOf("http") === 0);
   }
-  var clearTimer = null;
 
   var $ = function(id){ return document.getElementById(id); };
   var fTable=$("fTable"), fName=$("fName"), fItem=$("fItem"), fAmt=$("fAmt");
@@ -914,7 +914,7 @@
     });
     Array.prototype.forEach.call(area.querySelectorAll("[data-rmt]"), function(el){
       el.addEventListener("click", function(){
-        if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
+        if(lockSeat){ toast("桌號人數已鎖定,需解鎖才能刪除"); return; }
         var i = +el.getAttribute("data-rmt");
         if(!seats[i]) return;
         var t = seats[i].table;
@@ -925,7 +925,7 @@
   }
 
   function addTable(){
-    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
+    if(lockSeat){ toast("桌號人數已鎖定,需解鎖才能新增"); return; }
     var t = $("sTable").value.trim();
     var c = parseInt($("sCount").value, 10);
     if(!t){ toast("請填寫桌號"); $("sTable").focus(); return; }
@@ -946,7 +946,7 @@
   }
 
   function openSeat(ti, si){
-    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能修改"); return; }
+    if(lockName){ toast("座位姓名已鎖定,需解鎖才能填寫"); return; }
     var t = seats[ti]; if(!t) return;
     var st = t.seats[si]; if(!st) return;
     if(st.lk && st.lk !== myId){ toast("這個位置有人正在填寫"); return; }
@@ -1004,28 +1004,15 @@
     afterSeatChange({ action:"seatSet", bill:billCode, table:tName, idx:idx, name:nm });
   }
 
-  var seatClearArmed = false, seatClearTimer = null;
+  /* 清空座位圖會刪掉所有桌子與姓名,無法復原 → 要求輸入密碼 */
   function clearSeats(){
-    if(lockSeat){ toast("座位圖已鎖定,需解鎖才能清空"); return; }
-    var btn = $("clearSeatBtn");
-    if(!seatClearArmed){
-      seatClearArmed = true;
-      btn.classList.add("confirm");
-      btn.textContent = "再按一次確認";
-      seatClearTimer = setTimeout(resetSeatClear, 3000);
-      return;
-    }
-    seats = [];
-    afterSeatChange({ action:"seatsClear", bill:billCode });
-    resetSeatClear();
-    toast("已清空座位圖");
-  }
-  function resetSeatClear(){
-    seatClearArmed = false;
-    clearTimeout(seatClearTimer);
-    var btn = $("clearSeatBtn");
-    btn.classList.remove("confirm");
-    btn.textContent = "清空座位圖";
+    if(lockSeat || lockName){ toast("座位圖已鎖定,需解鎖才能清空"); return; }
+    if(!seats.length){ toast("座位圖已經是空的"); return; }
+    askPass("清空座位圖?所有桌子與姓名都會刪除", "確認清空", function(){
+      seats = [];
+      afterSeatChange({ action:"seatsClear", bill:billCode });
+      toast("已清空座位圖");
+    });
   }
 
   function switchPage(p){
@@ -1041,9 +1028,10 @@
 
   /* ── 鎖定 ─────────────────────────────
      鎖定不需密碼(誰都能鎖),解鎖才要密碼。鎖定狀態同步給所有人。 */
-  var LOCK_NAME = { order:"點餐", seat:"座位圖", info:"地點時間", menu:"菜單" };
+  var LOCK_NAME = { order:"點餐", seat:"桌號人數", name:"座位姓名", info:"地點時間", menu:"菜單" };
   function isLocked(which){
     return which === "seat" ? lockSeat
+         : which === "name" ? lockName
          : which === "info" ? lockInfo
          : which === "menu" ? lockMenu
          : lockOrder;
@@ -1051,19 +1039,29 @@
 
   function toggleLock(which){
     if(isLocked(which)){
-      pendingUnlock = which;
-      $("passTitle").textContent = "解除「"+LOCK_NAME[which]+"」鎖定";
-      $("passInput").value = "";
-      $("passMask").hidden = false;
-      $("passInput").focus();
+      askPass("解除「"+LOCK_NAME[which]+"」鎖定", "解鎖", function(){
+        setLock(which, false);
+        toast(LOCK_NAME[which] + "已解鎖");
+      });
       return;
     }
     setLock(which, true);
     toast(LOCK_NAME[which] + "已鎖定");
   }
 
+  /* 需要密碼才能執行的動作,統一走這裡 */
+  function askPass(title, okLabel, run){
+    passIntent = { run: run };
+    $("passTitle").textContent = title;
+    $("passOk").textContent = okLabel;
+    $("passInput").value = "";
+    $("passMask").hidden = false;
+    $("passInput").focus();
+  }
+
   function setLock(which, on){
     if(which === "seat"){ lockSeat = on; }
+    else if(which === "name"){ lockName = on; }
     else if(which === "info"){ lockInfo = on; }
     else if(which === "menu"){ lockMenu = on; }
     else { lockOrder = on; }
@@ -1077,27 +1075,24 @@
   }
 
   function submitPass(){
-    if(!pendingUnlock) return;
+    if(!passIntent) return;
     if($("passInput").value !== UNLOCK_PASS){
       toast("密碼錯誤");
       $("passInput").value = "";
       $("passInput").focus();
       return;
     }
-    var which = pendingUnlock;
+    var run = passIntent.run;
     closePass();
-    setLock(which, false);
-    toast(LOCK_NAME[which] + "已解鎖");
+    run();
   }
-  function closePass(){ pendingUnlock = null; $("passMask").hidden = true; }
+  function closePass(){ passIntent = null; $("passMask").hidden = true; }
 
   /* 依鎖定狀態停用對應頁面的所有輸入 */
   function applyLockUI(){
-    var ob = $("lockOrderBtn"), sb = $("lockSeatBtn");
+    var ob = $("lockOrderBtn");
     ob.textContent = lockOrder ? "🔒 已鎖定" : "🔓 鎖定";
     ob.classList.toggle("on", lockOrder);
-    sb.textContent = lockSeat ? "🔒 已鎖定" : "🔓 鎖定";
-    sb.classList.toggle("on", lockSeat);
 
     ["fTable","fName","fItem","fAmt","addBtn","svcChk"].forEach(function(id){
       $(id).disabled = lockOrder;
@@ -1106,9 +1101,19 @@
     $("clearBtn").disabled = lockOrder;
     $("clearBtn").classList.toggle("locked-off", lockOrder);
 
+    // 座位圖兩個獨立的鎖:桌號人數 / 座位姓名
+    var tb = $("lockSeatBtn");
+    tb.textContent = lockSeat ? "🔒 桌號人數" : "🔓 桌號人數";
+    tb.classList.toggle("on", lockSeat);
+    var nb = $("lockNameBtn");
+    nb.textContent = lockName ? "🔒 姓名" : "🔓 姓名";
+    nb.classList.toggle("on", lockName);
+
     ["sTable","sCount","addTableBtn"].forEach(function(id){ $(id).disabled = lockSeat; });
-    $("clearSeatBtn").disabled = lockSeat;
-    $("clearSeatBtn").classList.toggle("locked-off", lockSeat);
+    // 清空會同時刪掉桌子與姓名,任一上鎖就不給清
+    var noClear = lockSeat || lockName;
+    $("clearSeatBtn").disabled = noClear;
+    $("clearSeatBtn").classList.toggle("locked-off", noClear);
 
     var ib = $("lockInfoBtn");
     ib.textContent = lockInfo ? "🔒" : "🔓";
@@ -1235,6 +1240,31 @@
   function syncTableOptions(){
     fillTableOptions($("fTable"));
     fillNameOptions($("fName"), $("fTable").value);
+    updateOrderHint();
+  }
+
+  /* 桌號與姓名都取自座位圖,依目前狀態給對應的下一步指引 */
+  function updateOrderHint(){
+    var el = $("orderHint");
+    var t = $("fTable").value;
+    if(!seats.length){
+      el.classList.add("warn");
+      el.textContent = "座位圖還沒有桌子 — 先到「座位圖」新增一桌,這裡才有桌號可選。";
+      return;
+    }
+    if(!t){
+      el.classList.remove("warn");
+      el.textContent = "桌號與姓名都來自座位圖。先選桌號,姓名就會列出那一桌的人。";
+      return;
+    }
+    var ppl = namesOfTable(t);
+    if(!ppl.length){
+      el.classList.add("warn");
+      el.textContent = "桌號 "+t+" 的座位還沒填姓名 — 到「座位圖」點該桌座位填上名字。";
+      return;
+    }
+    el.classList.remove("warn");
+    el.textContent = "桌號 "+t+" 目前有 "+ppl.length+" 人可選。點完一筆會保留桌號與姓名,同一人可連續點餐。";
   }
 
   function rowHtml(r){
@@ -1284,34 +1314,21 @@
     toast("已匯出 CSV");
   }
 
+  /* 清空點餐紀錄無法復原 → 要求輸入密碼 */
   function clearAll(){
     if(lockOrder){ toast("點餐已鎖定,需解鎖才能清空"); return; }
-    var btn = $("clearBtn");
-    if(!clearArmed){
-      clearArmed = true;
-      btn.classList.add("confirm");
-      btn.textContent = "再按一次確認清空";
-      clearTimer = setTimeout(resetClear, 3000);
-      return;
-    }
-    if(online){
-      mutate({ action:"clear", bill:billCode })
-        .then(function(){ toast("已清空全部紀錄"); })
-        .catch(function(){ toast("清空失敗"); });
-      resetClear();
-      return;
-    }
-    records = [];
-    save(); render();
-    resetClear();
-    toast("已清空全部紀錄");
-  }
-  function resetClear(){
-    clearArmed = false;
-    clearTimeout(clearTimer);
-    var btn = $("clearBtn");
-    btn.classList.remove("confirm");
-    btn.textContent = "清空全部";
+    if(!records.length){ toast("目前沒有點餐紀錄"); return; }
+    askPass("清空全部點餐?共 "+records.length+" 筆紀錄會刪除", "確認清空", function(){
+      if(online){
+        mutate({ action:"clear", bill:billCode })
+          .then(function(){ toast("已清空全部紀錄"); })
+          .catch(function(){ toast("清空失敗"); });
+        return;
+      }
+      records = [];
+      save(); render();
+      toast("已清空全部紀錄");
+    });
   }
 
   function updateConnUI(){
@@ -1371,8 +1388,8 @@
     if(issuedAt && issuedAt < lastMutation) return;
 
     var sig = JSON.stringify([data.orders, data.svc, data.seats, data.lockOrder,
-                              data.lockSeat, data.lockInfo, data.lockMenu, data.place,
-                              data.time, data.menu]);
+                              data.lockSeat, data.lockInfo, data.lockMenu, data.lockName,
+                              data.place, data.time, data.menu]);
     if(sig === lastSig) return;
     lastSig = sig;
 
@@ -1380,6 +1397,7 @@
     lockSeat = !!data.lockSeat;
     lockInfo = !!data.lockInfo;
     lockMenu = !!data.lockMenu;
+    lockName = !!data.lockName;
     applyLockUI();
     fillInfo(data.place, data.time);
     fillMenu(data.menu);
@@ -1449,6 +1467,7 @@
   $("fTable").addEventListener("change", function(){
     this.classList.toggle("empty", !this.value);
     fillNameOptions($("fName"), this.value);       // 換桌就換該桌的人
+    updateOrderHint();
   });
   $("fName").addEventListener("change", function(){
     this.classList.toggle("empty", !this.value);
@@ -1482,6 +1501,7 @@
   $("eCancel").addEventListener("click", closeEdit);
   $("lockOrderBtn").addEventListener("click", function(){ toggleLock("order"); });
   $("lockSeatBtn").addEventListener("click", function(){ toggleLock("seat"); });
+  $("lockNameBtn").addEventListener("click", function(){ toggleLock("name"); });
   $("lockInfoBtn").addEventListener("click", function(){ toggleLock("info"); });
   $("lockMenuBtn").addEventListener("click", function(){ toggleLock("menu"); });
   [$("fPlace"), $("fTime")].forEach(function(el){
@@ -1541,6 +1561,7 @@
   try{
     lockOrder = localStorage.getItem("feast-lock-order") === "1";
     lockSeat  = localStorage.getItem("feast-lock-seat") === "1";
+    lockName  = localStorage.getItem("feast-lock-name") === "1";
     lockInfo  = localStorage.getItem("feast-lock-info") === "1";
     lockMenu  = localStorage.getItem("feast-lock-menu") === "1";
     if(!backendReady()){
