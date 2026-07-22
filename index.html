@@ -473,7 +473,8 @@
       <div class="conn-hint" id="orderHint" style="margin-top:9px"></div>
       <div class="field full">
         <label for="fItem">餐點內容 <em>*</em><span class="note">請用繁體字</span></label>
-        <input id="fItem" placeholder="滷肉飯、燙青菜…" autocomplete="off">
+        <input id="fItem" list="menuItemsList" placeholder="輸入,或從菜單選" autocomplete="off">
+        <datalist id="menuItemsList"></datalist>
       </div>
       <div class="field full">
         <label for="fAmt">金額 <em>*</em></label>
@@ -625,7 +626,7 @@
     </div>
     <div class="field full">
       <label for="eItem">餐點內容<span class="note">請用繁體字</span></label>
-      <input id="eItem" autocomplete="off">
+      <input id="eItem" list="menuItemsList" autocomplete="off">
     </div>
     <div class="field full">
       <label for="eAmt">金額</label>
@@ -1276,6 +1277,7 @@
   }
 
   function renderMenu(){
+    syncMenuDatalist();
     var raw = $("menuText").value || "";
     var box = $("menuPreview");
     var url = $("menuUrl").value.trim();
@@ -1456,6 +1458,40 @@
         btn.disabled = lockMenu;
         btn.textContent = "📷 上傳菜單照片";
       });
+  }
+
+  /* 從菜單內容解析出「品名 + 價格」,供點餐時直接選 */
+  function parseMenuItems(){
+    var raw = ($("menuText").value || "").split(/\r?\n/);
+    var out = [], seen = {};
+    raw.forEach(function(l){
+      l = l.trim();
+      if(!l || isImgLine(l)) return;
+      var m = l.match(/^(.*?)[\s\.\-–—:：]*\$?\s*(\d+(?:\.\d+)?)\s*(?:元)?$/);
+      if(m && m[1].trim()){
+        var name = m[1].trim();
+        if(!seen[name]){ seen[name] = 1; out.push({ name:name, price:parseFloat(m[2]) }); }
+      }
+    });
+    return out;
+  }
+
+  /* 把菜單品項灌進點餐用的下拉清單 */
+  function syncMenuDatalist(){
+    var items = parseMenuItems();
+    $("menuItemsList").innerHTML = items.map(function(it){
+      return '<option value="'+esc(it.name)+'">$'+money(it.price)+'</option>';
+    }).join("");
+  }
+
+  /* 餐點欄選到菜單裡的品項時,自動帶出金額(仍可手動改) */
+  function pickMenuItem(itemEl, amtEl){
+    var v = itemEl.value.trim();
+    if(!v) return;
+    var items = parseMenuItems();
+    for(var i=0;i<items.length;i++){
+      if(items[i].name === v){ amtEl.value = items[i].price; break; }
+    }
   }
 
   function rowHtml(r){
@@ -1685,6 +1721,8 @@
 
   // 事件
   $("addBtn").addEventListener("click", add);
+  $("fItem").addEventListener("input", function(){ pickMenuItem($("fItem"), $("fAmt")); });
+  $("eItem").addEventListener("input", function(){ pickMenuItem($("eItem"), $("eAmt")); });
   $("fTable").addEventListener("change", function(){
     this.classList.toggle("empty", !this.value);
     fillNameOptions($("fName"), this.value);       // 換桌就換該桌的人
