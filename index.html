@@ -200,6 +200,25 @@
   .svc-toggle input[type=checkbox]:disabled{cursor:not-allowed}
 
   /* 選餐廳 */
+  .voter-card{display:flex;align-items:center;gap:9px;padding:10px 14px;margin-bottom:14px}
+  .voter-card .ic{font-size:16px;flex:none}
+  .voter-card select{
+    flex:1;min-width:0;font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);
+    background:#fff;border:1.5px solid var(--line);border-radius:12px;
+    padding:9px 30px 9px 11px;cursor:pointer;appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%2367748A' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;background-size:11px;
+  }
+  .voter-card select.empty{color:var(--muted);font-weight:500;border-color:var(--amber);
+    box-shadow:0 0 0 3px rgba(201,148,79,.18)}
+  .voter-card select:focus{outline:none;border-color:var(--green)}
+  .voter-card .vstat{font-size:12px;font-weight:700;color:var(--muted);flex:none;white-space:nowrap}
+  .voters{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .voters span{
+    font-size:11px;font-weight:700;color:var(--green);background:var(--green-soft);
+    border-radius:10px;padding:2px 7px;
+  }
+  .voters span.me{background:var(--green);color:#FBFAF9}
   #placeList{padding:6px 0}
   .pl{
     display:flex;align-items:center;gap:12px;padding:13px 18px;
@@ -578,6 +597,12 @@
 
   <!-- 選餐廳 -->
   <div id="pagePlace">
+    <div class="card voter-card">
+      <span class="ic">🙋</span>
+      <select id="voterSel"></select>
+      <span class="vstat" id="voterStat"></span>
+    </div>
+
     <div class="card">
       <div class="toolbar">
         <span class="count" id="placeLbl">0 間提議</span>
@@ -740,6 +765,14 @@
   var page = "place";
   var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false, lockName = false, lockPlace = false;
   var places = [];
+  /* 投票名單 */
+  var ROSTER = ["西西","池昌旭(TZU)","YUN","NN","奶茶","JOE","RJ","嘎蓉","JC","小玉",
+    "MARS","小综","辣妹(米濃)","小依","蕉蕉","晴","希希","舒容","EVIE","欣",
+    "小兔","湯湯","TT","佩佩","猪猪","PATTY","ue","77","一心","yuuuu","AB","小敏"];
+  var voter = "";
+  var votedTotal = null;
+  try{ voter = localStorage.getItem("feast-voter") || ""; }catch(e){}
+
   var isAdmin = false, adminTok = "";
   try{ adminTok = localStorage.getItem("feast-tok") || ""; }catch(e){}
   var passIntent = null;   // {run:要執行的動作}
@@ -1664,30 +1697,54 @@
 
   /* ── 選餐廳 ───────────────────────────
      依票數由高到低排序,同票的先提議的在前。一人一票,再按一次收回。 */
+  function fillVoterSel(){
+    var sel = $("voterSel");
+    if(sel.options.length !== ROSTER.length + 1){
+      sel.innerHTML = '<option value="">選擇你的名字</option>' +
+        ROSTER.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join("");
+    }
+    sel.value = ROSTER.indexOf(voter) !== -1 ? voter : "";
+    sel.classList.toggle("empty", !sel.value);
+  }
+
   function renderPlaces(){
     var box = $("placeList");
+    fillVoterSel();
+
+    // 投票進度:由後端算(一般使用者拿不到名單,只拿得到數字)
+    var done = votedTotal;
+    if(done === null){
+      var seen = {};
+      places.forEach(function(p){ p.voters.forEach(function(v){ seen[v] = 1; }); });
+      done = Object.keys(seen).length;
+    }
+    $("voterStat").textContent = done + " / " + ROSTER.length + " 已投";
     $("placeLbl").textContent = places.length + " 間提議";
     if(!places.length){
       box.innerHTML = '<div class="empty"><div class="big">🗳️</div>'+
         '<p>還沒有人提議<br>在下方輸入餐廳名稱,大家一起投票決定</p></div>';
       return;
     }
+    function cnt(p){ return (typeof p.count === "number") ? p.count : p.voters.length; }
     var sorted = places.slice().sort(function(a,b){
-      var d = b.voters.length - a.voters.length;
+      var d = cnt(b) - cnt(a);
       return d !== 0 ? d : (a.seq - b.seq);
     });
-    var top = sorted[0].voters.length;
+    var top = cnt(sorted[0]);
     box.innerHTML = sorted.map(function(p, i){
-      var mine = p.voters.indexOf(myId) !== -1;
-      var lead = top > 0 && p.voters.length === top;
+      var mine = voter && p.voters.indexOf(voter) !== -1;
+      var lead = top > 0 && cnt(p) === top;
       return '<div class="pl'+(lead?' lead':'')+'">'+
         '<span class="rank">'+(lead ? "👑" : (i+1))+'</span>'+
         '<div class="body">'+
           '<div class="nm">'+esc(p.name)+'</div>'+
           (p.note ? '<div class="nt">'+esc(p.note)+'</div>' : '')+
+          ((isAdmin && p.voters.length) ? '<div class="voters">'+p.voters.map(function(v){
+              return '<span'+(v===voter?' class="me"':'')+'>'+esc(v)+'</span>';
+            }).join("")+'</div>' : '')+
         '</div>'+
         '<button class="vote'+(mine?' on':'')+'" data-vote="'+p.id+'"'+(lockPlace?' disabled':'')+'>'+
-          '<span class="n">'+p.voters.length+'</span>'+
+          '<span class="n">'+cnt(p)+'</span>'+
           '<span class="t">'+(mine ? "已投" : "投票")+'</span>'+
         '</button>'+
         ((lockPlace || (p.by !== myId && !isAdmin)) ? ''
@@ -1725,20 +1782,36 @@
 
   function votePlace(id){
     if(lockPlace){ toast("選餐廳已鎖定,需解鎖才能投票"); return; }
-    for(var i=0;i<places.length;i++){
-      if(places[i].id === id){
-        var at = places[i].voters.indexOf(myId);
-        if(at === -1){ places[i].voters.push(myId); } else { places[i].voters.splice(at,1); }
-        break;
+    if(!voter){ toast("請先在上方選擇你的名字"); $("voterSel").focus(); return; }
+
+    // 一人一票:先把自己從所有提議移除,再投給這一間(原本就投這間 = 收回)
+    var had = false;
+    places.forEach(function(p){
+      var at = p.voters.indexOf(voter);
+      if(at !== -1){
+        if(p.id === id) had = true;
+        p.voters.splice(at, 1);
+        p.count = Math.max(0, (p.count || 0) - 1);
+      }
+    });
+    if(!had){
+      for(var i=0;i<places.length;i++){
+        if(places[i].id === id){
+          places[i].voters.push(voter);
+          places[i].count = (places[i].count || 0) + 1;
+          break;
+        }
       }
     }
+    votedTotal = null;
     renderPlaces();
     if(online){
-      mutate({ action:"placeVote", bill:billCode, id:id, by:myId })
+      mutate({ action:"placeVote", bill:billCode, id:id, who:voter })
         .catch(function(){ toast("投票失敗"); });
     }else{
       savePlacesLocal();
     }
+    toast(had ? "已收回投票" : "已投給這間");
   }
 
   function delPlace(id){
@@ -1901,6 +1974,7 @@
   var writeSeq = 0, lastAppliedSeq = 0;
   function mutate(payload){
     if(adminTok) payload.tok = adminTok;
+    if(voter) payload.who = voter;
     lastMutation = Date.now();
     pendingWrites++;
     var mySeq = ++writeSeq;
@@ -1952,10 +2026,12 @@
     lockPlace = !!data.lockPlace;
     applyLockUI();
     if(Array.isArray(data.places)){
+      votedTotal = (typeof data.votedTotal === "number") ? data.votedTotal : null;
       places = data.places.map(function(p){
+        var vs = Array.isArray(p.voters) ? p.voters : [];
         return { id:String(p.id), name:String(p.name||""), note:String(p.note||""),
-                 by:String(p.by||""), seq:Number(p.seq)||0,
-                 voters: Array.isArray(p.voters) ? p.voters : [] };
+                 by:String(p.by||""), seq:Number(p.seq)||0, voters: vs,
+                 count: (typeof p.count === "number") ? p.count : vs.length };
       });
       renderPlaces();
     }
@@ -1979,7 +2055,9 @@
   /* 先問 rev(極輕量);沒變就不抓資料。
      另外每 15 秒仍強制完整抓一次,作為座位鎖逾時等「時間到期但無人寫入」情況的保險。 */
   function fetchFull(){
-    return fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode))
+    return fetch(API_URL + "?action=list&bill=" + encodeURIComponent(billCode) +
+                 (adminTok ? "&tok=" + encodeURIComponent(adminTok) : "") +
+                 (voter ? "&who=" + encodeURIComponent(voter) : ""))
       .then(function(r){ return r.json(); })
       .then(function(data){
         lastFullAt = Date.now();
@@ -2068,6 +2146,14 @@
   $("lockNameBtn").addEventListener("click", function(){ toggleLock("name"); });
   $("lockPlaceBtn").addEventListener("click", function(){ toggleLock("place"); });
   $("adminBtn").addEventListener("click", adminLogin);
+  $("voterSel").addEventListener("change", function(){
+    voter = this.value;
+    try{ localStorage.setItem("feast-voter", voter); }catch(e){}
+    lastRev = "";           // 換人 → 重新向後端取自己的投票狀態
+    renderPlaces();
+    poll();
+    if(voter) toast("你是「"+voter+"」,一人一票");
+  });
   $("addPlaceBtn").addEventListener("click", addPlace);
   [$("pName"), $("pNote")].forEach(function(el){
     el.addEventListener("keydown", function(e){ if(e.key === "Enter") addPlace(); });
