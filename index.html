@@ -1783,6 +1783,8 @@
   function votePlace(id){
     if(lockPlace){ toast("選餐廳已鎖定,需解鎖才能投票"); return; }
     if(!voter){ toast("請先在上方選擇你的名字"); $("voterSel").focus(); return; }
+    // 剛提議、還沒拿到正式編號的項目,伺服器對不上,先擋下
+    if(String(id).indexOf("tmp-") === 0){ toast("這間還在儲存中,稍等一下再投"); return; }
 
     // 一人一票:先把自己從所有提議移除,再投給這一間(原本就投這間 = 收回)
     var had = false;
@@ -1822,7 +1824,7 @@
     places = places.filter(function(p){ return p.id !== id; });
     renderPlaces();
     if(online){
-      mutate({ action:"placeDel", bill:billCode, id:id })
+      mutate({ action:"placeDel", bill:billCode, id:id, by:myId })
         .catch(function(){ toast("刪除失敗"); });
     }else{
       savePlacesLocal();
