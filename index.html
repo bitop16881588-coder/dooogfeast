@@ -200,6 +200,19 @@
   .svc-toggle input[type=checkbox]:disabled{cursor:not-allowed}
 
   /* 選餐廳 */
+  /* 提議一多頁面會很長 —— 限高並可獨立捲動 */
+  #placeList,#dateList{
+    max-height:320px;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:var(--press) transparent;
+  }
+  #placeList::-webkit-scrollbar,#dateList::-webkit-scrollbar{width:9px}
+  #placeList::-webkit-scrollbar-track,#dateList::-webkit-scrollbar-track{background:transparent}
+  #placeList::-webkit-scrollbar-thumb,#dateList::-webkit-scrollbar-thumb{
+    background:var(--press);border-radius:9px;border:2.5px solid var(--paper);
+  }
+  #placeList::-webkit-scrollbar-thumb:hover,#dateList::-webkit-scrollbar-thumb:hover{
+    background:var(--muted);
+  }
   .sec-title{
     font-size:13px;font-weight:900;color:var(--green);letter-spacing:.08em;
     padding:2px 4px 8px;
@@ -647,7 +660,11 @@
     <div class="card">
       <div class="toolbar">
         <span class="count" id="dateLbl">0 個日期</span>
-        <span class="vstat" id="dateStat"></span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="vstat" id="dateStat"></span>
+          <button class="mini-lock admin-only" id="lockDProposeBtn" title="鎖定後不能再提議日期">🔓 提議</button>
+          <button class="mini-lock admin-only" id="lockDVoteBtn" title="鎖定後不能再投票">🔓 投票</button>
+        </span>
       </div>
       <div id="dateList"></div>
     </div>
@@ -798,7 +815,8 @@
   var seats = loadSeats();
   var page = "place";
   var lockOrder = false, lockSeat = false, lockInfo = false, lockMenu = false,
-      lockName = false, lockPlace = false, lockPropose = false;
+      lockName = false, lockPlace = false, lockPropose = false,
+      lockDPropose = false, lockDVote = false;
   var places = [];
   /* 投票名單 */
   var ROSTER = ["西西","池昌旭(TZU)","YUN","NN","奶茶","JOE","RJ","嘎蓉","JC","小玉",
@@ -1261,11 +1279,14 @@
   /* ── 鎖定 ─────────────────────────────
      鎖定不需密碼(誰都能鎖),解鎖才要密碼。鎖定狀態同步給所有人。 */
   var LOCK_NAME = { order:"點餐", seat:"桌號人數", name:"座位姓名", info:"地點時間",
-                    menu:"菜單", place:"投票", propose:"餐廳提議" };
+                    menu:"菜單", place:"餐廳投票", propose:"餐廳提議",
+                    dpropose:"日期提議", dvote:"日期投票" };
   function isLocked(which){
     return which === "seat" ? lockSeat
          : which === "place" ? lockPlace
          : which === "propose" ? lockPropose
+         : which === "dpropose" ? lockDPropose
+         : which === "dvote" ? lockDVote
          : which === "name" ? lockName
          : which === "info" ? lockInfo
          : which === "menu" ? lockMenu
@@ -1364,6 +1385,8 @@
     if(which === "seat"){ lockSeat = on; }
     else if(which === "place"){ lockPlace = on; }
     else if(which === "propose"){ lockPropose = on; }
+    else if(which === "dpropose"){ lockDPropose = on; }
+    else if(which === "dvote"){ lockDVote = on; }
     else if(which === "name"){ lockName = on; }
     else if(which === "info"){ lockInfo = on; }
     else if(which === "menu"){ lockMenu = on; }
@@ -1433,11 +1456,17 @@
     qb.textContent = lockPropose ? "🔒 提議" : "🔓 提議";
     qb.classList.toggle("on", lockPropose);
 
-    ["pName","pNote","addPlaceBtn","dDate","addDateBtn"].forEach(function(id){
-      $(id).disabled = lockPropose;
-    });
+    ["pName","pNote","addPlaceBtn"].forEach(function(id){ $(id).disabled = lockPropose; });
+    ["dDate","addDateBtn"].forEach(function(id){ $(id).disabled = lockDPropose; });
+
+    var db = $("lockDProposeBtn");
+    db.textContent = lockDPropose ? "🔒 提議" : "🔓 提議";
+    db.classList.toggle("on", lockDPropose);
+    var vb = $("lockDVoteBtn");
+    vb.textContent = lockDVote ? "🔒 投票" : "🔓 投票";
+    vb.classList.toggle("on", lockDVote);
     // 清空會連提議帶票一起刪,任一上鎖就不給清
-    var noClearP = lockPlace || lockPropose;
+    var noClearP = lockPlace || lockPropose || lockDPropose || lockDVote;
     $("clearPlaceBtn").disabled = noClearP;
     $("clearPlaceBtn").classList.toggle("locked-off", noClearP);
 
@@ -1792,6 +1821,8 @@
       return;
     }
 
+    var vLock = isDate ? lockDVote : lockPlace;        // 該區的投票鎖
+    var pLock = isDate ? lockDPropose : lockPropose;   // 該區的提議鎖
     function cnt(p){ return (typeof p.count === "number") ? p.count : p.voters.length; }
     var sorted = list.slice().sort(function(a,b){
       var d = cnt(b) - cnt(a);
@@ -1812,11 +1843,11 @@
               return '<span'+(v===voter?' class="me"':'')+'>'+esc(v)+'</span>';
             }).join("")+'</div>' : '')+
         '</div>'+
-        '<button class="vote'+(mine?' on':'')+'" data-vote="'+p.id+'"'+(lockPlace?' disabled':'')+'>'+
+        '<button class="vote'+(mine?' on':'')+'" data-vote="'+p.id+'"'+(vLock?' disabled':'')+'>'+
           '<span class="n">'+cnt(p)+'</span>'+
           '<span class="t">'+(mine ? "已投" : "投票")+'</span>'+
         '</button>'+
-        ((lockPropose || (p.by !== myId && !isAdmin)) ? ''
+        ((pLock || (p.by !== myId && !isAdmin)) ? ''
           : '<button class="x" data-delp="'+p.id+'" title="刪除">✕</button>')+
       '</div>';
     }).join("");
@@ -1849,7 +1880,7 @@
   }
 
   function addDate(){
-    if(lockPropose){ toast("提議已鎖定,不能再新增"); return; }
+    if(lockDPropose){ toast("日期提議已鎖定,不能再新增"); return; }
     var d = $("dDate").value;
     if(!d){ toast("請選擇日期"); $("dDate").focus(); return; }
     var dup = places.some(function(p){ return kindOf(p) === "date" && p.name === d; });
@@ -1879,6 +1910,9 @@
     for(var t=0;t<places.length;t++){ if(places[t].id === id) target = places[t]; }
     if(!target) return;
     var k = kindOf(target);
+    if(k === "date" ? lockDVote : lockPlace){
+      toast((k === "date" ? "日期" : "餐廳") + "投票已鎖定,結果已定案"); return;
+    }
 
     var had = false;
     places.forEach(function(p){
@@ -1911,9 +1945,11 @@
   }
 
   function delPlace(id){
-    if(lockPropose){ toast("餐廳提議已鎖定,不能刪除"); return; }
     var t = null;
     for(var k=0;k<places.length;k++){ if(places[k].id === id) t = places[k]; }
+    if(t && (kindOf(t) === "date" ? lockDPropose : lockPropose)){
+      toast((kindOf(t) === "date" ? "日期" : "餐廳") + "提議已鎖定,不能刪除"); return;
+    }
     if(t && t.by !== myId && !isAdmin){ toast("只能刪除自己提議的餐廳"); return; }
     places = places.filter(function(p){ return p.id !== id; });
     renderPlaces();
@@ -1926,7 +1962,9 @@
   }
 
   function clearPlaces(){
-    if(lockPlace || lockPropose){ toast("選餐廳已鎖定,需解鎖才能清空"); return; }
+    if(lockPlace || lockPropose || lockDPropose || lockDVote){
+      toast("有區塊已鎖定,需全部解鎖才能清空"); return;
+    }
     if(!places.length){ toast("目前沒有提議"); return; }
     if(!requireAdmin("清空提議")) return;
     askConfirm("清空所有餐廳提議?共 "+places.length+" 間會刪除", "確認清空", function(){
@@ -2110,7 +2148,8 @@
     var sig = JSON.stringify([data.orders, data.svc, data.seats, data.lockOrder,
                               data.lockSeat, data.lockInfo, data.lockMenu, data.lockName,
                               data.place, data.time, data.menu, data.menuUrl,
-                              data.places, data.lockPlace, data.lockPropose]);
+                              data.places, data.lockPlace, data.lockPropose,
+                              data.lockDPropose, data.lockDVote]);
     if(sig === lastSig) return;
     lastSig = sig;
 
@@ -2121,6 +2160,8 @@
     lockName = !!data.lockName;
     lockPlace = !!data.lockPlace;
     lockPropose = !!data.lockPropose;
+    lockDPropose = !!data.lockDPropose;
+    lockDVote = !!data.lockDVote;
     applyLockUI();
     if(Array.isArray(data.places)){
       votedTotal = (data.votedTotal && typeof data.votedTotal === "object") ? data.votedTotal : null;
@@ -2244,6 +2285,8 @@
   $("lockNameBtn").addEventListener("click", function(){ toggleLock("name"); });
   $("lockPlaceBtn").addEventListener("click", function(){ toggleLock("place"); });
   $("lockProposeBtn").addEventListener("click", function(){ toggleLock("propose"); });
+  $("lockDProposeBtn").addEventListener("click", function(){ toggleLock("dpropose"); });
+  $("lockDVoteBtn").addEventListener("click", function(){ toggleLock("dvote"); });
   $("adminBtn").addEventListener("click", adminLogin);
   $("voterSel").addEventListener("change", function(){
     voter = this.value;
@@ -2335,6 +2378,8 @@
     lockName  = localStorage.getItem("feast-lock-name") === "1";
     lockPlace = localStorage.getItem("feast-lock-place") === "1";
     lockPropose = localStorage.getItem("feast-lock-propose") === "1";
+    lockDPropose = localStorage.getItem("feast-lock-dpropose") === "1";
+    lockDVote = localStorage.getItem("feast-lock-dvote") === "1";
     if(!backendReady()){ places = loadPlacesLocal(); }
     lockInfo  = localStorage.getItem("feast-lock-info") === "1";
     lockMenu  = localStorage.getItem("feast-lock-menu") === "1";
