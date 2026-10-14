@@ -2454,6 +2454,11 @@
       if(nm && !seen[nm]){ seen[nm] = 1; names.push(nm); }
     });
     if(!names.length){ toast("名單不能全空"); return; }
+    // 改名成名單裡已有的名字,會把兩人的票併成同一人(名字重複出現),直接擋下
+    var cnt = {};
+    editRoster.forEach(function(r){ var nm = r.name.trim(); if(nm) cnt[nm] = (cnt[nm] || 0) + 1; });
+    var dup = Object.keys(cnt).filter(function(k){ return cnt[k] > 1; });
+    if(dup.length){ toast("名單有重複的名字:「" + dup.join("、") + "」,請改成不同名字"); return; }
 
     // 先把改名的連動到投票/報名(後端也會做,這裡讓本地即時反映)
     editRoster.forEach(function(r){
